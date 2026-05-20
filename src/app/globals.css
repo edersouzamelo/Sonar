@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+/* Fix definitivo dark mode: Tailwind v4 usa media query por padrão.
+   Esta linha faz dark: responder à classe .dark no html (next-themes),
+   não ao prefers-color-scheme do sistema. Com forcedTheme="light" no
+   layout, .dark nunca é aplicada → todas as classes dark: ficam inativas. */
+@variant dark (&:is(.dark *));
+
+@layer base {
+  :root {
+    --background: #F4F9FF;
+    /* Azul muito claro */
+    --foreground: #1A1A1A;
+    /* Quase preto */
+    --card: #FFFFFF;
+    --card-foreground: #1A1A1A;
+    --popover: #FFFFFF;
+    --popover-foreground: #1A1A1A;
+    --primary: #FFB000;
+    /* Dourado/Âmbar */
+    --primary-foreground: #1A1A1A;
+    --secondary: #E8F2FF;
+    /* Azul suave */
+    --secondary-foreground: #1A1A1A;
+    --muted: #E8F2FF;
+    --muted-foreground: #8A8A8A;
+    --accent: #FFB000;
+    --accent-foreground: #1A1A1A;
+    --destructive: #EF4444;
+    --destructive-foreground: #F4F9FF;
+    --border: #E5E5E5;
+    --input: #E5E5E5;
+    --ring: #FFB000;
+    --radius: 1rem;
+    /* 16px - Borda arredondada maior */
+  }
+
+  /* Dark Mode Overrides */
+  .dark {
+    --background: #1A1A1A;
+    --foreground: #FDFBF7;
+    --card: #2D2D2D;
+    --card-foreground: #FDFBF7;
+    --popover: #2D2D2D;
+    --popover-foreground: #FDFBF7;
+    --primary: #FFB000;
+    --primary-foreground: #1A1A1A;
+    --secondary: #333333;
+    --secondary-foreground: #FDFBF7;
+    --muted: #333333;
+    --muted-foreground: #A1A1AA;
+    --accent: #FFB000;
+    --accent-foreground: #1A1A1A;
+    --destructive: #7F1D1D;
+    --destructive-foreground: #FDFBF7;
+    --border: #404040;
+    --input: #404040;
+    --ring: #FFB000;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* @apply bg-background text-foreground; removed due to unknown utility error */
+  }
+}
+
+/* Custom High-Visibility Scrollbar Styles */
+@layer utilities {
+  ::-webkit-scrollbar {
+    width: 14px;
+    /* Wider vertical scrollbar */
+    height: 14px;
+    /* Higher horizontal scrollbar */
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #e0e0e0;
+    border-radius: 0px;
+    border: 1px solid #d4d4d4;
+  }
+
+  .dark ::-webkit-scrollbar-track {
+    background: #1e1e1e;
+    border: 1px solid #333;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 5px;
+    border: 2px solid #f1f1f1;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+    /* Even darker on hover */
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #aaa;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: rgba(0, 0, 0, 0);
+  }
+
+  /* Force scrollbar to be always visible on the table container */
+  .force-scrollbar {
+    overflow: auto;
+    scrollbar-color: #888 #e0e0e0;
+    /* Firefox support */
+    scrollbar-width: auto;
+    /* Firefox support */
+  }
+}
+
+@keyframes pulse-subtle {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: scale(1.002);
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
