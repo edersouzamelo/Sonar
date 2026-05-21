@@ -9,12 +9,23 @@ import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
+const developmentPaths = new Set([
+    "/organizacoes-militares",
+    "/execucao-orcamentaria",
+    "/tenders",
+    "/links",
+    "/reports",
+    "/admin",
+    "/admin/notifications",
+])
+
 export function AppShell({ children }: { children: React.ReactNode }) {
     const { isAuthenticated } = useUser()
     const pathname = usePathname()
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [isMounted, setIsMounted] = useState(false)
+    const showDevelopmentBanner = developmentPaths.has(pathname)
 
     // Garantir montagem
     useEffect(() => {
@@ -72,6 +83,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className={`flex flex-col flex-1 min-h-screen transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] ${isSidebarCollapsed ? 'md:pl-20' : 'md:pl-60'} bg-radar-cream`}>
                 <Header onMenuOpen={() => setIsMobileMenuOpen(true)} />
                 <main className="flex-1 px-4 md:px-8 pb-4">
+                    {showDevelopmentBanner && (
+                        <div className="mb-4 rounded-lg border-2 border-yellow-500 bg-yellow-300 px-4 py-3 text-center text-sm font-black uppercase tracking-wide text-black shadow-lg">
+                            EM DESENVOLVIMENTO
+                        </div>
+                    )}
                     {children}
                 </main>
             </div>

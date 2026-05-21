@@ -31,17 +31,17 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
         { name: "Agente Colosso", href: "/colosso", icon: Bot },
         { name: "Agenda", href: "/agenda", icon: CalendarIcon },
         { name: "Ordens de Servico", href: "/issues", icon: AlertCircle },
-        { name: "Organizacoes Militares", href: "/", icon: LayoutDashboard },
-        { name: "Execucao Orcamentaria", href: "/execucao-orcamentaria", icon: Banknote },
-        { name: "Pregoes", href: "/tenders", icon: Gavel },
-        { name: "Vinculos", href: "/links", icon: Users2 },
-        { name: "Relatorios", href: "/reports", icon: FileText },
+        { name: "Organizacoes Militares", href: "/organizacoes-militares", icon: LayoutDashboard, development: true },
+        { name: "Execucao Orcamentaria", href: "/execucao-orcamentaria", icon: Banknote, development: true },
+        { name: "Pregoes", href: "/tenders", icon: Gavel, development: true },
+        { name: "Vinculos", href: "/links", icon: Users2, development: true },
+        { name: "Relatorios", href: "/reports", icon: FileText, development: true },
         { name: "Contato", href: "/contact", icon: MessageSquare },
     ];
 
     if ((role as string) === "Chefe da Secao de Licitacoes" || role === "Administrador") {
-        navigation.push({ name: "Gerenciamento de Perfis", href: "/admin", icon: Shield });
-        navigation.push({ name: "Central de Alertas", href: "/admin/notifications", icon: Bell });
+        navigation.push({ name: "Gerenciamento de Perfis", href: "/admin", icon: Shield, development: true });
+        navigation.push({ name: "Central de Alertas", href: "/admin/notifications", icon: Bell, development: true });
     }
 
     return (
@@ -100,7 +100,16 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                 )}
                                 aria-hidden="true"
                             />
-                            {!isCollapsed && <span>{item.name}</span>}
+                            {!isCollapsed && (
+                                <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                                    <span className="truncate">{item.name}</span>
+                                    {item.development && (
+                                        <span className="shrink-0 rounded bg-yellow-300 px-1.5 py-0.5 text-[9px] font-black leading-none text-black">
+                                            EM DEV
+                                        </span>
+                                    )}
+                                </span>
+                            )}
                         </Link>
                     ))}
                 </nav>
