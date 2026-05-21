@@ -100,7 +100,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 2. Ouvir mudanças na autenticação
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session) {
-                updateUserFromSession(session);
+                setTimeout(() => updateUserFromSession(session), 0);
             } else {
                 setIsAuthenticated(false);
                 setUser(null);
@@ -210,6 +210,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const updateUserFromSession = (session: any) => {
+        sessionStorage.removeItem('sonar_google_login_in_progress');
         setIsAuthenticated(true);
         const email = session.user.email || '';
         const userData = {
@@ -248,6 +249,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
 
     const loginWithGoogle = async () => {
+        if (sessionStorage.getItem('sonar_google_login_in_progress') === 'true') return;
+        sessionStorage.setItem('sonar_google_login_in_progress', 'true');
+
         const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '');
 
         // Detect if we are on localhost vs production
@@ -261,6 +265,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             }
         });
         if (error) {
+            sessionStorage.removeItem('sonar_google_login_in_progress');
             console.error("Erro no login com Google:", error.message);
             throw error;
         }

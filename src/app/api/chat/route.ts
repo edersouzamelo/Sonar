@@ -28,6 +28,7 @@ export async function POST(req: Request) {
         const { messages, tendersData, teamData } = await req.json();
         const lastMessage = messages[messages.length - 1];
         let ragContext = '';
+        let serviceOrdersContext = '';
 
         if (lastMessage && lastMessage.role === 'user') {
             try {
@@ -66,9 +67,35 @@ export async function POST(req: Request) {
             }
         }
 
+        try {
+            const { data: serviceOrders, error: serviceOrdersError } = await supabase
+                .from('service_orders')
+                .select('id, file_name, uploaded_at, uploaded_by, extracted_text, service_order_deadlines(due_date, title, source_file)')
+                .order('uploaded_at', { ascending: false })
+                .limit(25);
+
+            if (!serviceOrdersError && serviceOrders?.length) {
+                const reduced = serviceOrders.map((order: any) => ({
+                    id: order.id,
+                    arquivo: order.file_name,
+                    enviado_em: order.uploaded_at,
+                    enviado_por: order.uploaded_by,
+                    resumo_texto: typeof order.extracted_text === 'string' ? order.extracted_text.slice(0, 3000) : '',
+                    prazos: (order.service_order_deadlines || []).map((d: any) => ({
+                        data: d.due_date,
+                        titulo: d.title,
+                        origem: d.source_file,
+                    })),
+                }));
+                serviceOrdersContext = JSON.stringify(reduced);
+            }
+        } catch (serviceOrderError) {
+            console.error('Erro ao carregar Ordens de Servico para o Colosso:', serviceOrderError);
+        }
+
         const systemPrompt = `
 Voce e "Colosso", o assistente de inteligencia artificial do sistema SONAR.
-Sua missao e responder sobre processos logisticos, processos licitatorios, equipes, estoques, classes de suprimento e dados operacionais disponiveis no painel.
+Sua missao e responder sobre processos logisticos, processos licitatorios, equipes, ordens de servico, estoques, classes de suprimento e dados operacionais disponiveis no painel.
 
 ${ragContext ? `
 ============ DADOS RAG (ARQUIVOS DO SISTEMA) ============
@@ -86,12 +113,15 @@ ${JSON.stringify(tendersData)}
 DADOS DA EQUIPE E SEUS CARGOS:
 ${JSON.stringify(teamData || {})}
 
+DADOS DE ORDENS DE SERVICO (OS) E PRAZOS:
+${serviceOrdersContext || 'Sem ordens de servico registradas no momento.'}
+
 Regras de resposta:
 1. Responda em portugues do Brasil, com clareza e objetividade.
 2. Se perguntarem sobre carga de trabalho, cruze os dados dos processos com os dados da equipe.
 3. Se alguma informacao aparecer como "Nao informado", vazia ou ausente, diga que o dado ainda nao consta nos registros.
 4. Mantenha tom firme, respeitoso e prestativo.
-5. Se perguntarem algo fora do SONAR, diga que voce, Colosso, so pode responder sobre a base logistica, licitatoria e de pessoal do sistema.
+5. Se perguntarem algo fora do SONAR, diga que voce, Colosso, so pode responder sobre a base logistica, licitatoria, ordens de servico e de pessoal do sistema.
 `;
 
         const response = await openai.createChatCompletion({

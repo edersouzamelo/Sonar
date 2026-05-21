@@ -11,8 +11,9 @@ import {
     Shield,
     MessageSquare,
     Bell,
+    Banknote,
+    Bot,
     ChevronLeft,
-    ChevronRight,
     Users2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,18 +28,20 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     const { role, logout } = useUser();
 
     const navigation = [
-        { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-        { name: 'Agenda', href: '/agenda', icon: CalendarIcon },
-        { name: 'Pregões', href: '/tenders', icon: Gavel },
-        { name: 'Vínculos', href: '/links', icon: Users2 },
-        { name: 'Intercorrências', href: '/issues', icon: AlertCircle },
-        { name: 'Relatórios', href: '/reports', icon: FileText },
-        { name: 'Contato', href: '/contact', icon: MessageSquare },
+        { name: "Agente Colosso", href: "/colosso", icon: Bot },
+        { name: "Agenda", href: "/agenda", icon: CalendarIcon },
+        { name: "Ordens de Servico", href: "/issues", icon: AlertCircle },
+        { name: "Organizacoes Militares", href: "/", icon: LayoutDashboard },
+        { name: "Execucao Orcamentaria", href: "/execucao-orcamentaria", icon: Banknote },
+        { name: "Pregoes", href: "/tenders", icon: Gavel },
+        { name: "Vinculos", href: "/links", icon: Users2 },
+        { name: "Relatorios", href: "/reports", icon: FileText },
+        { name: "Contato", href: "/contact", icon: MessageSquare },
     ];
 
-    if (role === 'Chefe da Seção de Licitações' || role === 'Administrador') {
-        navigation.push({ name: 'Gerenciamento de Perfis', href: '/admin', icon: Shield });
-        navigation.push({ name: 'Central de Alertas', href: '/admin/notifications', icon: Bell });
+    if ((role as string) === "Chefe da Secao de Licitacoes" || role === "Administrador") {
+        navigation.push({ name: "Gerenciamento de Perfis", href: "/admin", icon: Shield });
+        navigation.push({ name: "Central de Alertas", href: "/admin/notifications", icon: Bell });
     }
 
     return (
@@ -46,7 +49,6 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
             "flex h-full flex-col bg-[#1A1A1A] text-[#FDFBF7] shadow-2xl transition-all duration-300 border-r border-white/10",
             isCollapsed ? "w-20 rounded-r-3xl m-0 h-screen" : "w-60 rounded-r-[3rem] m-4 ml-4 h-[calc(100vh-2rem)]"
         )}>
-            {/* Toggle Button */}
             <button
                 onClick={onToggle}
                 className={cn(
@@ -114,7 +116,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                         isCollapsed ? "justify-center" : ""
                     )}>
                         <Settings className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
-                        {!isCollapsed && "Configurações"}
+                        {!isCollapsed && "Configuracoes"}
                     </button>
                     <button
                         onClick={logout}

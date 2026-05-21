@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { useTenders } from "@/contexts/tenders-context"
@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation"
 import { AgendaEvent, Person } from "@/types"
 import { generateAgendaReport } from "@/lib/report-utils"
 import { FileDown, MessageSquare } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 
 
@@ -32,15 +33,41 @@ export default function AgendaPage() {
     const { tenders, dateChecks } = useTenders()
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
     const [searchQuery, setSearchQuery] = useState("")
+    const [serviceOrderEvents, setServiceOrderEvents] = useState<Array<{ id: string; title: string; date: string; sourceFile: string; sourceOrderId: string }>>([])
     const router = useRouter()
 
     const today = startOfDay(new Date())
+
+    useEffect(() => {
+        const loadServiceOrderEvents = () => {
+            supabase.auth.refreshSession().then(async ({ data: refreshed }) => {
+                const session = refreshed.session || (await supabase.auth.getSession()).data.session;
+                if (!session?.access_token) return;
+
+                try {
+                    const response = await fetch('/api/service-orders', {
+                        headers: { Authorization: `Bearer ${session.access_token}` }
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Falha ao carregar prazos de OS.');
+
+                    setServiceOrderEvents((result.orders || []).flatMap((order: any) => order.deadlines || []));
+                } catch (error) {
+                    console.warn('[Agenda] Falha ao carregar prazos de OS:', error);
+                    setServiceOrderEvents([]);
+                }
+            });
+        };
+
+        loadServiceOrderEvents();
+    }, []);
 
     // Mapeamento extensivo de todas as datas do sistema
     const allEvents = useMemo(() => {
         const events: AgendaEvent[] = []
 
-        tenders.forEach(t => {
+        const legacyTenders: typeof tenders = [];
+        legacyTenders.forEach(t => {
             const isCancelled = t.status.includes('CANCELADO') || t.status === 'ABANDONADO';
             if (isCancelled) return;
 
@@ -91,8 +118,34 @@ export default function AgendaPage() {
             addEvent(t.dates?.vigenciaAnterior, "Vigência Anterior", "vigenciaAnterior")
         })
 
+        serviceOrderEvents.forEach(osEvent => {
+            try {
+                const date = startOfDay(parseISO(osEvent.date));
+                if (!isValid(date)) return;
+
+                const isOverdue = isBefore(date, today);
+                events.push({
+                    id: `service-order-${osEvent.id}`,
+                    tenderId: osEvent.sourceOrderId,
+                    tenderNumber: "OS CCOL",
+                    uasg: "CCOL",
+                    label: osEvent.title,
+                    date,
+                    type: "deadline",
+                    isOk: false,
+                    isOverdue,
+                    tenderStatus: "Ordem de Serviço",
+                    description: osEvent.sourceFile,
+                    requesterSector: "CCOL",
+                    daysDiff: differenceInDays(today, date)
+                });
+            } catch (e) {
+                console.error("Erro ao processar prazo de OS:", osEvent.date);
+            }
+        });
+
         return events.sort((a, b) => a.date.getTime() - b.date.getTime())
-    }, [tenders, dateChecks, today])
+    }, [tenders, dateChecks, serviceOrderEvents, today])
 
     // Filtragem por busca
     const filteredEvents = allEvents.filter(e =>

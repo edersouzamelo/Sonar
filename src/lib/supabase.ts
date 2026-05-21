@@ -1,3 +1,4 @@
+import { processLock } from '@supabase/auth-js'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -11,7 +12,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 let client;
 try {
-    client = createClient(supabaseUrl, supabaseAnonKey);
+    client = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+            lock: processLock,
+        },
+    });
 } catch (e) {
     console.error('❌ Critical error creating Supabase client:', e);
 }

@@ -73,7 +73,21 @@ interface TendersContextType {
 
 const TendersContext = createContext<TendersContextType | undefined>(undefined);
 
+async function withCloudTimeout<T>(request: PromiseLike<T>, label: string, timeoutMs = 10000): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`${label} demorou mais de ${timeoutMs / 1000}s para responder.`)), timeoutMs);
+    });
+
+    try {
+        return await Promise.race([request, timeout]);
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
+}
+
 export function TendersProvider({ children }: { children: ReactNode }) {
+    const { isAuthenticated } = useUser();
     const [tenders, setTenders] = useState<Tender[]>(initialTenders);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
@@ -121,10 +135,11 @@ export function TendersProvider({ children }: { children: ReactNode }) {
         console.log("[Radar] Buscando dados da nuvem para unificação...");
         try {
             // 1. Carregar Equipe (Fonte única de verdade)
-            const { data: cloudTeam, error: teamError } = await supabase
+            const { data: cloudTeam, error: teamError } = await withCloudTimeout(supabase
                 .from('team_members')
                 .select('*')
-                .order('name', { ascending: true });
+                .order('name', { ascending: true })
+                .then(result => result), 'Equipe SONAR');
 
             if (teamError) throw teamError;
 
@@ -140,7 +155,10 @@ export function TendersProvider({ children }: { children: ReactNode }) {
             }
 
             // 2. Licitações
-            const { data: cloudTenders, error: tendersError } = await supabase.from('tenders').select('*');
+            const { data: cloudTenders, error: tendersError } = await withCloudTimeout(
+                supabase.from('tenders').select('*').then(result => result),
+                'Processos SONAR'
+            );
             if (tendersError) throw tendersError;
 
             if (cloudTenders && cloudTenders.length > 0) {
@@ -186,9 +204,18 @@ export function TendersProvider({ children }: { children: ReactNode }) {
                     totalPeople: cloudTeam?.length || 0,
                     totalRecords: sortedTenders.length + (cloudTeam?.length || 0)
                 });
+            } else {
+                isCloudLoaded.current = true;
+                setCloudStatus({
+                    isConnected: true, status: 'online', lastSync: new Date(),
+                    totalTenders: 0,
+                    totalDates: 0,
+                    totalPeople: cloudTeam?.length || 0,
+                    totalRecords: cloudTeam?.length || 0
+                });
             }
         } catch (err: any) {
-            console.error("[Radar] Erro fatal na carga unificada:", err.message);
+            console.warn("[SONAR] Nuvem indisponivel na carga inicial:", err.message);
             setCloudStatus(prev => ({ ...prev, status: 'error', isConnected: false, message: err.message }));
         }
     }, []);
@@ -196,12 +223,16 @@ export function TendersProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         let isMounted = true;
         async function init() {
+            if (!isAuthenticated) {
+                if (isMounted) setIsLoaded(true);
+                return;
+            }
             if (supabase) await loadDataFromCloud(true);
             if (isMounted) setIsLoaded(true);
         }
         init();
         return () => { isMounted = false; };
-    }, [loadDataFromCloud]);
+    }, [isAuthenticated, loadDataFromCloud]);
 
     // --- DATA SYNC LOGIC (PUSH) ---
     const pushDataToCloud = useCallback(async () => {
