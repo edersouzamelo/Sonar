@@ -2,7 +2,7 @@ import { Bell, Menu, RefreshCw, Trash2, CheckCircle, Info, AlertTriangle } from 
 import { UserNav } from "@/components/user-nav";
 import { useTenders } from "@/contexts/tenders-context";
 import { useNotifications } from "@/contexts/notifications-context";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -19,18 +19,59 @@ export function Header({ onMenuOpen }: HeaderProps) {
     const { searchQuery, setSearchQuery, cloudStatus, pullDataFromCloud } = useTenders();
     const { alerts, unreadCount, markAsRead, markAllAsRead, clearAlerts } = useNotifications();
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [databaseHealth, setDatabaseHealth] = useState<'checking' | 'online' | 'offline'>('checking');
     const router = useRouter();
+
+    const checkDatabaseHealth = async () => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setDatabaseHealth('offline');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/health/database', { cache: 'no-store' });
+            setDatabaseHealth(response.ok ? 'online' : 'offline');
+        } catch {
+            setDatabaseHealth('offline');
+        }
+    };
+
+    useEffect(() => {
+        checkDatabaseHealth();
+        const interval = window.setInterval(checkDatabaseHealth, 30000);
+        const handleOnline = () => checkDatabaseHealth();
+        const handleOffline = () => setDatabaseHealth('offline');
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.clearInterval(interval);
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     const handleRefresh = async () => {
         setIsRefreshing(true);
+        await checkDatabaseHealth();
         await pullDataFromCloud(true);
+        await checkDatabaseHealth();
         setIsRefreshing(false);
     };
 
+    const isOffline = databaseHealth === 'offline';
+    const isChecking = databaseHealth === 'checking';
+    const isUpdating = databaseHealth === 'online' && (cloudStatus.status === 'syncing' || isRefreshing);
+    const statusLabel = isOffline
+        ? 'Banco indisponivel'
+        : isUpdating
+            ? 'Atualizando dados'
+            : 'Banco online';
     const statusDot =
-        cloudStatus.status === 'online' ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]' :
-            cloudStatus.status === 'syncing' ? 'bg-blue-500 animate-pulse' :
-                'bg-red-400';
+        isOffline ? 'bg-red-400' :
+            isChecking || isUpdating ? 'bg-green-500 animate-pulse' :
+                'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]';
 
     return (
         <header className="flex h-16 md:h-24 w-full items-center gap-x-2 md:gap-x-4 px-3 md:px-8 bg-transparent border-b border-slate-100 dark:border-slate-800">
@@ -74,21 +115,16 @@ export function Header({ onMenuOpen }: HeaderProps) {
             <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 ml-auto md:ml-2">
 
                 {/* Indicador cloud — Unificado e Responsivo */}
-                <div className={`flex items-center gap-1.5 text-xs px-2 py-1 md:px-2.5 md:py-1.5 rounded-full border ${cloudStatus.status === 'online'
-                    ? 'bg-white dark:bg-slate-800 border-green-100 dark:border-green-900 text-gray-500 dark:text-gray-400'
-                    : cloudStatus.status === 'syncing'
-                        ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 text-blue-600 dark:text-blue-400'
-                        : 'bg-red-50 dark:bg-red-950 border-red-200 text-red-500 dark:text-red-400'
+                <div className={`flex items-center gap-1.5 text-xs px-2 py-1 md:px-2.5 md:py-1.5 rounded-full border ${isOffline
+                    ? 'bg-red-50 dark:bg-red-950 border-red-200 text-red-500 dark:text-red-400'
+                    : 'bg-green-50 dark:bg-green-950 border-green-200 text-green-700 dark:text-green-400'
                     }`}>
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot}`} />
 
                     <div className="flex flex-col sm:flex-row sm:items-center gap-x-2 font-medium whitespace-nowrap">
-                        <span className="text-[10px] md:text-xs">
-                            {cloudStatus.status === 'online' ? 'Tempo Real' :
-                                cloudStatus.status === 'syncing' ? 'Sincronizando…' : 'Offline'}
-                        </span>
+                        <span className="text-[10px] md:text-xs">{isChecking ? 'Verificando banco' : statusLabel}</span>
 
-                        {cloudStatus.isConnected && (
+                        {cloudStatus.isConnected && !isOffline && (
                             <div className="flex items-center gap-1.5 text-[9px] md:text-[10px] text-gray-400 dark:text-gray-500 border-t sm:border-t-0 sm:border-l border-gray-100 dark:border-gray-800 sm:pl-2 mt-0.5 sm:mt-0">
                                 <span title="Processos salvos">{cloudStatus.totalTenders} processos</span>
                                 <span className="opacity-30">•</span>
