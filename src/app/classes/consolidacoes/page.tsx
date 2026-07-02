@@ -59,6 +59,11 @@ const readApiResponse = async (response: Response) => {
     }
 };
 
+const readOptionalApiResponse = async (response: Response) => {
+    const result = await readApiResponse(response);
+    return response.ok ? result : {};
+};
+
 const runWithConcurrency = async <T,>(items: T[], limit: number, worker: (item: T, index: number) => Promise<void>) => {
     let nextIndex = 0;
     const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -139,9 +144,8 @@ export default function ConsolidacoesPage() {
             ]);
 
             const result = await readApiResponse(consolidationsResponse);
-            const organizationsResult = await readApiResponse(organizationsResponse);
+            const organizationsResult = await readOptionalApiResponse(organizationsResponse);
             if (!consolidationsResponse.ok) throw new Error(result.error || "Falha ao carregar consolidacoes.");
-            if (!organizationsResponse.ok) throw new Error(organizationsResult.error || "Falha ao carregar relacao oficial de OM.");
 
             const loadedGroups = organizationsResult.groups || cmoOrganizationGroups;
             setColumns(result.columns || []);
