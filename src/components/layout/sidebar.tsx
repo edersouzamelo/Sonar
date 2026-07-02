@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { type ComponentType, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
     LayoutDashboard,
     Gavel,
@@ -17,7 +17,8 @@ import {
     ChevronLeft,
     ChevronRight,
     PackageOpen,
-    Users2
+    Users2,
+    type LucideIcon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUser } from "@/contexts/user-context";
@@ -31,7 +32,7 @@ interface SidebarProps {
 type NavItem = {
     name: string;
     href: string;
-    icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+    icon: LucideIcon;
     development?: boolean;
     children?: Array<{
         name: string;
