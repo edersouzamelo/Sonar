@@ -3,8 +3,9 @@
 import type { ChangeEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
-import { ArrowLeft, Banknote, BarChart3, CircleDollarSign, ClipboardList, FileSpreadsheet, FileText, TrendingUp, UploadCloud } from "lucide-react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { ArrowLeft, Banknote, BarChart3, CircleDollarSign, ClipboardList, FileSpreadsheet, FileText, TrendingUp, UploadCloud, HelpCircle } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { defaultSupplyClassKey, getSupplyClass } from "@/lib/supply-classes";
 
 const budgetAreas = [
@@ -77,6 +78,14 @@ export default function DemonstracoesOrcamentariasPage() {
     const [sagUploads, setSagUploads] = useState<SagUpload[]>([]);
     const latestSagUpload = useMemo(() => sagUploads[0], [sagUploads]);
     const [totalDisponivelCmo, setTotalDisponivelCmo] = useState<number | null>(null);
+    const [lastUploadDate, setLastUploadDate] = useState<string | null>(null);
+
+    useEffect(() => {
+        const storedTotal = localStorage.getItem('totalDisponivelCmo');
+        const storedDate = localStorage.getItem('lastUploadDateCmo');
+        if (storedTotal) setTotalDisponivelCmo(parseFloat(storedTotal));
+        if (storedDate) setLastUploadDate(storedDate);
+    }, []);
 
     const handleSagUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files || []);
@@ -109,6 +118,11 @@ export default function DemonstracoesOrcamentariasPage() {
             if (res.ok) {
                 const data = await res.json();
                 setTotalDisponivelCmo(data.totalDisponivel);
+                const now = new Date().toISOString();
+                setLastUploadDate(now);
+                localStorage.setItem('totalDisponivelCmo', data.totalDisponivel.toString());
+                localStorage.setItem('lastUploadDateCmo', now);
+                
                 setSagUploads(current => current.map(u => 
                     uploads.find(up => up.id === u.id) ? { ...u, status: "Processado" as const } : u
                 ));
@@ -220,12 +234,34 @@ export default function DemonstracoesOrcamentariasPage() {
                                         <div key={item.label} className="rounded-lg border border-slate-100 bg-white p-5 shadow-sm">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <p className="text-xs font-black uppercase leading-5 tracking-wide text-slate-400">{item.label}</p>
+                                                    <div className="flex items-start gap-2">
+                                                        <p className="text-xs font-black uppercase leading-5 tracking-wide text-slate-400">{item.label}</p>
+                                                        {item.label === "Total de creditos disponiveis de Classe II ambito CMO" && (
+                                                            <Popover>
+                                                                <PopoverTrigger asChild>
+                                                                    <button type="button" className="text-slate-300 hover:text-slate-500 transition-colors mt-0.5">
+                                                                        <HelpCircle className="h-4 w-4" />
+                                                                    </button>
+                                                                </PopoverTrigger>
+                                                                <PopoverContent className="w-80 text-sm z-50 bg-white" side="right">
+                                                                    <p className="font-bold mb-2">Heurística da Informação</p>
+                                                                    <p className="text-slate-600 leading-relaxed">
+                                                                        Dado obtido semiautomaticamente a partir do SAG. Para atualizar: Entre no SAG {'>'} SIAFI/Gestão {'>'} Saldos Gerenciais Exercício Corrente. Clique em &quot;exibir filtros&quot;. Na coluna Tabela 1 selecione [PI], Comando Militar, selecione [CMO], Plano interno preencha &quot;intendencia&quot; e selecione todos os PI E6MI, depois exporte PDF. Faça o upload deste PDF e o Sonar processa e exibe automaticamente o saldo.
+                                                                    </p>
+                                                                </PopoverContent>
+                                                            </Popover>
+                                                        )}
+                                                    </div>
                                                     <p className="mt-3 text-2xl font-black text-radar-dark">
                                                         {item.label === "Total de creditos disponiveis de Classe II ambito CMO" && totalDisponivelCmo !== null 
                                                             ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalDisponivelCmo)
                                                             : "A informar"}
                                                     </p>
+                                                    {item.label === "Total de creditos disponiveis de Classe II ambito CMO" && lastUploadDate && (
+                                                        <p className="mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                            Última atualização: {new Date(lastUploadDate).toLocaleDateString("pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 <div className={`shrink-0 rounded-lg p-2 ${item.tone}`}>
                                                     <Icon className="h-5 w-5" />
