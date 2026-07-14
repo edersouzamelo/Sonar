@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 // @ts-ignore
 import pdfParse from 'pdf-parse';
 import * as xlsx from 'xlsx';
+import fs from 'fs';
+import path from 'path';
 
 export async function POST(req: Request) {
     try {
@@ -18,9 +20,9 @@ export async function POST(req: Request) {
                 const data = await pdfParse(buffer);
                 const text = data.text;
                 
-                // Regex to find a row of numbers. The first number is 'DISPONIVEL'.
-                // Example format: 1,87 478,13 0,00 0,00 0,00 99.61% 0.00%
-                const regex = /([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+[\d.,]+%\s+[\d.,]+%/g;
+                // Regex to find 5 consecutive monetary values in Brazilian format (e.g. 1.000,00) without spaces.
+                // Example format: 1,87478,130,000,000,0099.61%0.00%
+                const regex = /((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})/g;
                 let match;
                 while ((match = regex.exec(text)) !== null) {
                     const valueStr = match[1].replace(/\./g, '').replace(',', '.');
