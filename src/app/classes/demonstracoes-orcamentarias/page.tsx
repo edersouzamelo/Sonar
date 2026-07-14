@@ -254,7 +254,7 @@ export default function DemonstracoesOrcamentariasPage() {
                                                         {item.label === "Total de creditos disponiveis de Classe II ambito CMO" && (
                                                             <Popover>
                                                                 <PopoverTrigger asChild>
-                                                                    <button type="button" className="text-slate-300 hover:text-slate-500 transition-colors mt-0.5">
+                                                                    <button type="button" className="text-slate-500 hover:text-radar-dark transition-colors mt-0.5">
                                                                         <HelpCircle className="h-4 w-4" />
                                                                     </button>
                                                                 </PopoverTrigger>
