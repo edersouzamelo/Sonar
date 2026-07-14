@@ -18,6 +18,8 @@ import {
     ChevronRight,
     PackageOpen,
     Users2,
+    Scale,
+    ClipboardList,
     type LucideIcon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,7 @@ type NavItem = {
     href: string;
     icon: LucideIcon;
     development?: boolean;
+    tourId?: string;
     children?: Array<{
         name: string;
         href: string;
@@ -41,7 +44,7 @@ type NavItem = {
 };
 
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
-    const { role, logout } = useUser();
+    const { logout, isDeveloper } = useUser();
     const [flyoutTop, setFlyoutTop] = useState(0);
     const [openFlyout, setOpenFlyout] = useState<string | null>(null);
     const flyoutCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,28 +69,34 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     }));
 
     const navigation: NavItem[] = [
-        { name: "Agente Colosso", href: "/colosso", icon: Bot },
-        { name: "Agenda", href: "/agenda", icon: CalendarIcon },
-        { name: "Ordens de Servico", href: "/issues", icon: AlertCircle },
-        { name: "Classes", href: "/classes", icon: PackageOpen, children: classModules },
-        { name: "Organizacoes Militares", href: "/organizacoes-militares", icon: LayoutDashboard, development: true },
+        { name: "Agente Colosso", href: "/colosso", icon: Bot, tourId: "nav-colosso" },
+        { name: "Agenda", href: "/agenda", icon: CalendarIcon, tourId: "nav-agenda" },
+        { name: "Ordens de Servico", href: "/issues", icon: AlertCircle, tourId: "nav-ordens" },
+        { name: "DIEx normativos, regulamentos e legislacoes", href: "/normas-legislacoes", icon: Scale, tourId: "nav-normas" },
+        { name: "Classes", href: "/classes", icon: PackageOpen, children: classModules, tourId: "nav-classes" },
+        { name: "Secao de Planejamento", href: "/secao-planejamento", icon: ClipboardList, tourId: "nav-planejamento" },
+        { name: "Organizacoes Militares apoiadas", href: "/organizacoes-militares", icon: LayoutDashboard, tourId: "nav-organizacoes" },
         { name: "Execucao Orcamentaria", href: "/execucao-orcamentaria", icon: Banknote, development: true },
         { name: "Pregoes", href: "/tenders", icon: Gavel, development: true },
         { name: "Vinculos", href: "/links", icon: Users2, development: true },
-        { name: "Relatorios", href: "/reports", icon: FileText, development: true },
+        { name: "Modelos", href: "/reports", icon: FileText, development: true },
         { name: "Contato", href: "/contact", icon: MessageSquare },
     ];
 
-    if ((role as string) === "Chefe da Secao de Licitacoes" || role === "Administrador") {
-        navigation.push({ name: "Gerenciamento de Perfis", href: "/admin", icon: Shield, development: true });
+    if (isDeveloper) {
+        navigation.push({ name: "Painel de Controle", href: "/admin", icon: Shield, development: true });
         navigation.push({ name: "Central de Alertas", href: "/admin/notifications", icon: Bell, development: true });
     }
+
+    const visibleNavigation = navigation.filter(item => !item.development || isDeveloper);
 
     return (
         <div className={cn(
             "flex h-full flex-col bg-[#1A1A1A] text-[#FDFBF7] shadow-2xl transition-all duration-300 border-r border-white/10",
             isCollapsed ? "w-20 rounded-r-3xl m-0 h-screen" : "w-60 rounded-r-[3rem] m-4 ml-4 h-[calc(100vh-2rem)]"
-        )}>
+        )}
+            data-tour="sidebar"
+        >
             <button
                 onClick={onToggle}
                 className={cn(
@@ -121,7 +130,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
 
             <div className="flex-1 flex flex-col gap-2 overflow-y-auto overflow-x-visible px-3 py-4">
                 <nav className="space-y-2">
-                    {navigation.map((item) => {
+                    {visibleNavigation.map((item) => {
                         const hasChildren = Boolean(item.children?.length);
 
                         return (
@@ -142,6 +151,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                             >
                                 <Link
                                     href={item.href}
+                                    data-tour={item.tourId}
                                     title={isCollapsed ? item.name : ""}
                                     className={cn(
                                         "group flex items-center rounded-2xl p-3 text-sm font-medium transition-all duration-200",
@@ -161,7 +171,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                             <span className="truncate">{item.name}</span>
                                             {hasChildren && <ChevronRight className="h-4 w-4 shrink-0 opacity-60 transition-transform group-hover/nav:translate-x-0.5" />}
                                             {item.development && (
-                                                <span className="shrink-0 rounded bg-yellow-300 px-1.5 py-0.5 text-[9px] font-black leading-none text-black">
+                                                <span className="shrink-0 rounded bg-fuchsia-500 px-1.5 py-0.5 text-[9px] font-black leading-none text-white shadow-[0_0_14px_rgba(217,70,239,0.75)]">
                                                     EM DEV
                                                 </span>
                                             )}
@@ -184,7 +194,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
                                     >
                                         <div className="rounded-2xl border border-white/10 bg-[#1A1A1A] p-2 text-[#FDFBF7] shadow-2xl shadow-black/30">
                                             <div className="px-3 pb-2 pt-1 text-[10px] font-black uppercase tracking-widest text-[#FFB000]">
-                                                Classes de suprimento
+                                                {item.name}
                                             </div>
                                             <div className="space-y-1">
                                                 {item.children?.map((child) => (

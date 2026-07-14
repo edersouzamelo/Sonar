@@ -16,11 +16,23 @@ create table if not exists service_orders (
     uploaded_by text not null,
     uploaded_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
+    order_number text,
+    subject text,
+    issuing_body text,
+    responsible text,
+    priority text,
+    tags text[] not null default '{}',
     extracted_text text,
     file_data_base64 text,
     file_data_mime text
 );
 
+alter table service_orders add column if not exists order_number text;
+alter table service_orders add column if not exists subject text;
+alter table service_orders add column if not exists issuing_body text;
+alter table service_orders add column if not exists responsible text;
+alter table service_orders add column if not exists priority text;
+alter table service_orders add column if not exists tags text[] not null default '{}';
 alter table service_orders add column if not exists file_data_base64 text;
 alter table service_orders add column if not exists file_data_mime text;
 

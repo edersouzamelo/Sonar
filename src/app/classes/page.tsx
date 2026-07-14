@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -17,7 +17,7 @@ const classModules = [
         statusClassName: "bg-emerald-50 text-emerald-700",
     },
     {
-        title: "Apresentações",
+        title: "Apresentacoes",
         href: "apresentacoes",
         description: (shortLabel: string) =>
             `Repositorio de briefings, paineis e materiais de apresentacao vinculados a ${shortLabel}.`,
@@ -27,7 +27,7 @@ const classModules = [
         statusClassName: "bg-blue-50 text-blue-700",
     },
     {
-        title: "Demonstrações Orçamentárias",
+        title: "Demonstracoes Orcamentarias",
         href: "demonstracoes-orcamentarias",
         description: (shortLabel: string) =>
             `Quadro para acompanhar creditos, empenhos, liquidacoes e saldos orcamentarios da ${shortLabel}.`,

@@ -3,14 +3,13 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { FileText, Download, TrendingUp, Calendar, ShieldCheck } from "lucide-react"
+import { FileText, Download, TrendingUp, ShieldCheck, ExternalLink } from "lucide-react"
 import { useTenders } from "@/contexts/tenders-context"
 import { generateSpedDocument, SpedDocumentData, generateDiexDocument, DiexParaData } from "@/lib/document-utils"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
 
 export default function ReportsPage() {
     const { tenders } = useTenders()
+    const technicalVisitReportModelUrl = "https://drive.google.com/file/d/1edfPaxZ1sCFXfUzefYbGQvFuaqPVmeMu/view"
 
     const handleDownloadSped = () => {
         const data: SpedDocumentData[] = tenders.map(t => ({
@@ -63,21 +62,60 @@ export default function ReportsPage() {
         }
     }
 
+    const handleOpenTechnicalVisitReportModel = () => {
+        window.open(technicalVisitReportModelUrl, "_blank", "noopener,noreferrer")
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-radar-dark tracking-tighter uppercase italic flex items-center">
                         <FileText className="mr-2 h-6 w-6 text-radar-gold" />
-                        Módulo de Relatórios
+                        Módulo de Modelos
                     </h1>
-                    <p className="text-sm text-gray-500">Documentos oficiais e auditoria de prazos da SALC.</p>
+                    <p className="text-sm text-gray-500">Modelos oficiais e documentos de apoio da SALC.</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Card DIEx - Notificação Formal */}
+                {/* Modelo de Relatorio de Visita de Orientacao Tecnica */}
                 <Card className="border-none shadow-xl bg-white overflow-hidden group hover:ring-2 ring-radar-gold transition-all border-l-4 border-l-radar-gold">
+                    <div className="h-2 bg-radar-gold" />
+                    <CardHeader>
+                        <div className="flex items-center space-x-2 mb-2">
+                            <FileText className="w-5 h-5 text-radar-gold" />
+                            <Badge className="bg-radar-gold text-radar-dark text-[9px] uppercase font-black">Modelo</Badge>
+                        </div>
+                        <CardTitle className="text-xl font-black text-radar-dark uppercase leading-tight">
+                            Relatório de Visita de <br /> Orientação Técnica
+                        </CardTitle>
+                        <CardDescription className="text-xs font-medium uppercase mt-2">
+                            Baseado no relatório do 10º R C Mec disponível no Google Drive.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="p-3 bg-radar-gold/5 rounded-lg border border-dashed border-radar-gold/20">
+                            <p className="text-[10px] text-radar-dark font-bold uppercase italic">Referência:</p>
+                            <ul className="mt-2 text-[10px] space-y-1 text-gray-600 font-medium">
+                                <li>• OM inspecionada: 10º R C Mec</li>
+                                <li>• Estrutura de inspeção logística</li>
+                                <li>• Pontos fortes e oportunidades de melhoria</li>
+                                <li>• Ações a realizar, responsáveis e prazos</li>
+                            </ul>
+                        </div>
+                        <Button
+                            onClick={handleOpenTechnicalVisitReportModel}
+                            className="w-full bg-radar-dark text-white hover:bg-black font-black uppercase tracking-tighter shadow-lg group-hover:bg-radar-gold group-hover:text-radar-dark transition-colors"
+                        >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Abrir Modelo
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Card DIEx - Notificação Formal */}
+                <Card className="border-none shadow-xl bg-white overflow-hidden group hover:ring-2 ring-radar-gold transition-all">
                     <div className="h-2 bg-radar-dark" />
                     <CardHeader>
                         <div className="flex items-center space-x-2 mb-2">

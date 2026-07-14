@@ -8,24 +8,20 @@ import { Header } from "@/components/layout/header"
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
-
-const developmentPaths = new Set([
-    "/organizacoes-militares",
-    "/execucao-orcamentaria",
-    "/tenders",
-    "/links",
-    "/reports",
-    "/admin",
-    "/admin/notifications",
-])
+import { isDevOnlyPath } from "@/lib/dev-access"
+import { SonarGuide } from "@/components/onboarding/sonar-guide"
+import { HelpCircle } from "lucide-react"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-    const { isAuthenticated } = useUser()
+    const { isAuthenticated, isDeveloper, user } = useUser()
     const pathname = usePathname()
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [isMounted, setIsMounted] = useState(false)
-    const showDevelopmentBanner = developmentPaths.has(pathname)
+    const [guideOpenRequest, setGuideOpenRequest] = useState(0)
+    const isCurrentPathDevOnly = isDevOnlyPath(pathname)
+    const showDevelopmentBanner = isCurrentPathDevOnly && isDeveloper
+    const isPresentationSurface = pathname.startsWith("/monitor") || /^\/apresentacoes\/[^/]+\/apresentar$/.test(pathname)
 
     // Garantir montagem
     useEffect(() => {
@@ -60,6 +56,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return <LoginPage />
     }
 
+    if (isPresentationSurface) {
+        return <>{children}</>
+    }
+
     return (
         <div className="flex min-h-screen bg-radar-cream">
             {/* Mobile Drawer */}
@@ -84,13 +84,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Header onMenuOpen={() => setIsMobileMenuOpen(true)} />
                 <main className="flex-1 px-4 md:px-8 pb-4">
                     {showDevelopmentBanner && (
-                        <div className="mb-4 rounded-lg border-2 border-yellow-500 bg-yellow-300 px-4 py-3 text-center text-sm font-black uppercase tracking-wide text-black shadow-lg">
+                        <div className="mb-4 rounded-lg border-2 border-fuchsia-300 bg-fuchsia-500 px-4 py-3 text-center text-sm font-black uppercase tracking-wide text-white shadow-[0_0_24px_rgba(217,70,239,0.65)]">
                             EM DESENVOLVIMENTO
                         </div>
                     )}
-                    {children}
+                    {isCurrentPathDevOnly && !isDeveloper ? (
+                        <div className="flex min-h-[60vh] items-center justify-center">
+                            <div className="max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+                                <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-400">Acesso restrito</p>
+                                <h1 className="mt-3 text-2xl font-black text-radar-dark">Modulo em desenvolvimento</h1>
+                                <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
+                                    Esta area esta visivel apenas para o perfil administrador/dev enquanto estiver em desenvolvimento.
+                                </p>
+                            </div>
+                        </div>
+                    ) : children}
                 </main>
+                <footer className="px-4 pb-5 md:px-8">
+                    <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/70 px-4 py-3 text-xs font-semibold text-slate-500 shadow-sm backdrop-blur sm:flex-row">
+                        <span>SONAR - apoio digital ao controle operacional</span>
+                        <button
+                            type="button"
+                            data-tour="guide-replay"
+                            onClick={() => setGuideOpenRequest(value => value + 1)}
+                            className="inline-flex items-center gap-2 rounded-full border border-radar-gold/40 bg-radar-gold/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-radar-dark transition-all hover:bg-radar-gold hover:shadow-md"
+                        >
+                            <HelpCircle className="h-4 w-4" />
+                            Reassistir guia
+                        </button>
+                    </div>
+                </footer>
             </div>
+            <SonarGuide
+                user={user}
+                isAuthenticated={isAuthenticated}
+                forceOpenRequest={guideOpenRequest}
+            />
         </div>
     )
 }

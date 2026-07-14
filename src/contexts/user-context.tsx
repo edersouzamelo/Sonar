@@ -1,6 +1,7 @@
 "use client"
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isDeveloperIdentity } from '@/lib/dev-access';
 
 export type UserRole =
     | 'Administrador'
@@ -23,6 +24,7 @@ export interface UserPermissions {
 interface UserContextType {
     role: UserRole;
     permissions: UserPermissions;
+    isDeveloper: boolean;
     setRole: (role: UserRole) => void;
     isAuthenticated: boolean;
     user: { id: string; name: string; email: string; avatar?: string } | null;
@@ -55,10 +57,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         channel
             .on('presence', { event: 'sync' }, () => {
                 const state = channel.presenceState();
-                const users: any[] = [];
+                const usersById = new Map<string, UserContextType['onlineUsers'][number]>();
                 Object.values(state).forEach((presence: any) => {
                     presence.forEach((p: any) => {
-                        users.push({
+                        const key = String(p.id || p.email || p.name || crypto.randomUUID());
+                        usersById.set(key, {
                             id: p.id,
                             name: p.name,
                             email: p.email,
@@ -67,7 +70,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                         });
                     });
                 });
-                setOnlineUsers(users);
+                setOnlineUsers(Array.from(usersById.values()));
 
                 // Atualiza last_seen no banco (opcional, mas bom para histórico)
                 supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id);
@@ -129,8 +132,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 .eq('id', userId)
                 .single();
 
-            // FAILSAFE: Respeita o Major independente de qualquer tabela
-            if (email === 'edersouzamelo@gmail.com') {
+            // FAILSAFE: edersouzamelo e sempre Administrador/dev, independente de qualquer tabela
+            if (isDeveloperIdentity({ email, name: user?.name })) {
                 const majorPerms = {
                     edit_tenders: true,
                     edit_dates: true,
@@ -140,6 +143,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 };
                 setRole('Administrador');
                 setPermissions(majorPerms);
+                if (!profileData) {
+                    await supabase.from('profiles').insert([{
+                        id: userId,
+                        email: email,
+                        full_name: user?.name || email.split('@')[0],
+                        role: 'Administrador',
+                        permissions: majorPerms,
+                        is_admin: true
+                    }]);
+                } else {
+                    await supabase.from('profiles').update({
+                        role: 'Administrador',
+                        permissions: majorPerms,
+                        is_admin: true
+                    }).eq('id', userId);
+                }
                 return;
             }
 
@@ -194,13 +213,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 .gte('last_seen', today.toISOString());
 
             if (data) {
-                setDailyUsers(data.map(p => ({
-                    id: p.id,
-                    name: p.full_name || p.email.split('@')[0],
-                    email: p.email,
-                    avatar: p.avatar_url,
-                    lastSeen: p.last_seen
-                })));
+                const usersById = new Map<string, UserContextType['dailyUsers'][number]>();
+                data.forEach(p => {
+                    const key = String(p.id || p.email);
+                    usersById.set(key, {
+                        id: p.id,
+                        name: p.full_name || p.email.split('@')[0],
+                        email: p.email,
+                        avatar: p.avatar_url,
+                        lastSeen: p.last_seen
+                    });
+                });
+                setDailyUsers(Array.from(usersById.values()));
             }
         };
 
@@ -222,8 +246,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setUser(userData);
 
         const normalizedEmail = email.toLowerCase().trim();
-        // FAILSAFE: Se for o Major, força Admin independente do banco
-        if (normalizedEmail === 'edersouzamelo@gmail.com') {
+        // FAILSAFE: Se for edersouzamelo, forca Admin/dev independente do banco
+        if (isDeveloperIdentity({ email: normalizedEmail, name: userData.name })) {
             setRole('Administrador');
             setPermissions({
                 edit_tenders: true,
@@ -237,14 +261,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
         fetchUserProfile(session.user.id, email);
 
         // Registra log de acesso para histórico permanente
-        supabase.from('access_logs').insert([{
-            user_id: session.user.id,
-            user_name: session.user.user_metadata.full_name || email.split('@')[0] || 'Usuário',
-            user_email: email,
-            user_role: null, // será atualizado após fetchUserProfile
-            accessed_at: new Date().toISOString()
-        }]).then(({ error }) => {
-            if (error) console.warn('[AccessLog] Erro ao registrar acesso:', error.message);
+        fetch('/api/admin/access-log', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({
+                user_name: session.user.user_metadata.full_name || email.split('@')[0] || 'Usuario',
+                user_email: email,
+                page_path: typeof window !== 'undefined' ? window.location.pathname : null
+            })
+        }).catch((error) => {
+            console.warn('[AccessLog] Erro ao registrar acesso:', error.message);
         });
     };
 
@@ -297,6 +326,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         <UserContext.Provider value={{
             role,
             permissions,
+            isDeveloper: isDeveloperIdentity(user),
             setRole: updateRole,
             isAuthenticated,
             user,

@@ -67,7 +67,9 @@ export function Header({ onMenuOpen }: HeaderProps) {
         ? 'Banco indisponivel'
         : isUpdating
             ? 'Atualizando dados'
-            : 'Banco online';
+            : cloudStatus.isConnected
+                ? 'Banco online'
+                : 'Banco online';
     const statusDot =
         isOffline ? 'bg-red-400' :
             isChecking || isUpdating ? 'bg-green-500 animate-pulse' :
@@ -93,7 +95,7 @@ export function Header({ onMenuOpen }: HeaderProps) {
             </div>
 
             {/* Busca — cresce para ocupar o espaço disponível */}
-            <div className="flex flex-1 min-w-0 md:ml-8 md:max-w-md">
+            <div className="flex flex-1 min-w-0 md:ml-8 md:max-w-md" data-tour="header-search">
                 <div className="relative w-full text-gray-400 focus-within:text-radar-gold">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                         <svg className="h-4 w-4 md:h-5 md:w-5" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor">
@@ -115,10 +117,13 @@ export function Header({ onMenuOpen }: HeaderProps) {
             <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0 ml-auto md:ml-2">
 
                 {/* Indicador cloud — Unificado e Responsivo */}
-                <div className={`flex items-center gap-1.5 text-xs px-2 py-1 md:px-2.5 md:py-1.5 rounded-full border ${isOffline
+                <div
+                    data-tour="header-status"
+                    className={`flex items-center gap-1.5 text-xs px-2 py-1 md:px-2.5 md:py-1.5 rounded-full border ${isOffline
                     ? 'bg-red-50 dark:bg-red-950 border-red-200 text-red-500 dark:text-red-400'
                     : 'bg-green-50 dark:bg-green-950 border-green-200 text-green-700 dark:text-green-400'
-                    }`}>
+                    }`}
+                >
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot}`} />
 
                     <div className="flex flex-col sm:flex-row sm:items-center gap-x-2 font-medium whitespace-nowrap">
@@ -160,7 +165,7 @@ export function Header({ onMenuOpen }: HeaderProps) {
 
                 <Popover>
                     <PopoverTrigger asChild>
-                        <button type="button" className="p-2 text-gray-500 hover:text-radar-gold transition-colors relative flex-shrink-0">
+                        <button type="button" data-tour="header-notifications" className="p-2 text-gray-500 hover:text-radar-gold transition-colors relative flex-shrink-0">
                             <span className="sr-only">Ver notificações</span>
                             <Bell className="h-5 w-5" aria-hidden="true" />
                             {unreadCount > 0 && (
@@ -233,7 +238,7 @@ export function Header({ onMenuOpen }: HeaderProps) {
                     </PopoverContent>
                 </Popover>
 
-                <div className="flex items-center pl-2 border-l border-gray-200">
+                <div className="flex items-center pl-2 border-l border-gray-200" data-tour="header-user">
                     <UserNav />
                 </div>
             </div>

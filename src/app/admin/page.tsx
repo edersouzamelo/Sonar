@@ -53,6 +53,9 @@ export default function AdminPage() {
     const [permChecked, setPermChecked] = useState<Record<string, Record<string, boolean>>>({});
     const permCheckedInit = useRef(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const uniqueOnlineUsers = Array.from(
+        new Map(onlineUsers.map(u => [u.id || u.email || u.name, u])).values()
+    );
 
     const fetchProfiles = async () => {
         setIsSyncing(true);
@@ -74,40 +77,31 @@ export default function AdminPage() {
     // Monitor de Adesão com histórico por período
     const [accessPeriod, setAccessPeriod] = useState<'today' | 'week' | 'month' | 'year'>('today');
     const [accessLogs, setAccessLogs] = useState<any[]>([]);
+    const [accessSource, setAccessSource] = useState<string | null>(null);
     const [logsLoading, setLogsLoading] = useState(false);
 
     useEffect(() => {
         const fetchAccessLogs = async () => {
             setLogsLoading(true);
-            const now = new Date();
-            let since: Date;
-            if (accessPeriod === 'today') {
-                since = new Date(now); since.setHours(0, 0, 0, 0);
-            } else if (accessPeriod === 'week') {
-                since = new Date(now); since.setDate(now.getDate() - 7);
-            } else if (accessPeriod === 'month') {
-                since = new Date(now); since.setMonth(now.getMonth() - 1);
-            } else {
-                since = new Date(now); since.setFullYear(now.getFullYear() - 1);
-            }
-
-            const { data } = await supabase
-                .from('access_logs')
-                .select('*')
-                .gte('accessed_at', since.toISOString())
-                .order('accessed_at', { ascending: false });
-
-            if (data) {
-                // Desduplicar: manter apenas o acesso mais recente por usuário
+            try {
+                const response = await fetch(`/api/admin/control-panel?period=${accessPeriod}`, { cache: 'no-store' });
+                const payload = await response.json();
+                const data = payload.accessLogs || [];
                 const seen = new Set<string>();
-                const unique = data.filter(log => {
-                    if (seen.has(log.user_id)) return false;
-                    seen.add(log.user_id);
+                const unique = data.filter((log: any) => {
+                    const key = log.user_id || log.user_email || log.id;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
                     return true;
                 });
                 setAccessLogs(unique);
+                setAccessSource(payload.ok ? null : 'Nao foi possivel ler os acessos.');
+            } catch (error: any) {
+                setAccessLogs([]);
+                setAccessSource(error?.message || 'Nao foi possivel ler os acessos.');
+            } finally {
+                setLogsLoading(false);
             }
-            setLogsLoading(false);
         };
         fetchAccessLogs();
     }, [accessPeriod]);
@@ -136,13 +130,14 @@ export default function AdminPage() {
 
         return {
             ...member,
+            adminKey: `${member.type}-${member.id || member.email || member.name}`,
             full_name: profile?.full_name || member.name,
             permissions: basePerms,
             profile_id: profile?.id,
             is_auth_user: !!profile
         };
     }).sort((a, b) => a.full_name.localeCompare(b.full_name))
-        .filter((member, index, self) => index === self.findIndex(m => m.id === member.id));
+        .filter((member, index, self) => index === self.findIndex(m => m.adminKey === member.adminKey));
 
     // Inicializa permChecked UMA VEZ com permissões do banco
     useEffect(() => {
@@ -199,7 +194,7 @@ export default function AdminPage() {
         }
     }
 
-    if (role !== 'Administrador' && role !== 'Chefe da Seção de Licitações') {
+    if (!['Administrador', 'Chefe da Seção de Licitações'].includes(role as string)) {
         return (
             <div className="flex flex-col items-center justify-center h-[70vh] space-y-4">
                 <AlertTriangle className="h-16 w-16 text-red-500" />
@@ -223,7 +218,7 @@ export default function AdminPage() {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-radar-dark dark:text-white flex items-center">
                         <Shield className="mr-2 h-8 w-8 text-radar-gold" />
-                        Painel de Controle SALC
+                        Painel de Controle
                     </h1>
                     <p className="text-muted-foreground">Monitoramento ao vivo e gestão de permissões do sistema</p>
                 </div>
@@ -318,11 +313,11 @@ export default function AdminPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-3">
-                            {onlineUsers.length === 0 ? (
+                            {uniqueOnlineUsers.length === 0 ? (
                                 <p className="text-sm text-muted-foreground italic">Apenas você monitorando...</p>
                             ) : (
-                                onlineUsers.map((u) => (
-                                    <div key={u.id} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-100 dark:border-green-800">
+                                uniqueOnlineUsers.map((u) => (
+                                    <div key={`online-card-${u.id || u.email}`} className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/10 rounded-lg border border-green-100 dark:border-green-800">
                                         <div className="flex items-center space-x-2">
                                             <div className="h-2 w-2 bg-green-500 rounded-full" />
                                             <div>
@@ -368,14 +363,14 @@ export default function AdminPage() {
                                 <div className="text-[10px] font-black uppercase text-muted-foreground mb-2 flex items-center justify-between">
                                     Acessando Agora
                                     <Badge variant="outline" className="text-[10px] h-4 bg-green-50 text-green-700 border-green-200">
-                                        {onlineUsers.length} ONLINE
+                                        {uniqueOnlineUsers.length} ONLINE
                                     </Badge>
                                 </div>
                                 <div className="space-y-1">
-                                    {onlineUsers.length === 0 ? (
+                                    {uniqueOnlineUsers.length === 0 ? (
                                         <p className="text-[11px] text-muted-foreground italic">Apenas você online...</p>
-                                    ) : onlineUsers.map(u => (
-                                        <div key={u.id} className="flex items-center gap-2 p-1.5 bg-green-50/40 rounded-lg border border-green-100/60">
+                                    ) : uniqueOnlineUsers.map(u => (
+                                        <div key={`online-monitor-${u.id || u.email}`} className="flex items-center gap-2 p-1.5 bg-green-50/40 rounded-lg border border-green-100/60">
                                             <div className="h-6 w-6 rounded-full bg-radar-dark text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0">{u.name[0]}</div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-[11px] font-bold truncate">{u.name}</p>
@@ -397,12 +392,17 @@ export default function AdminPage() {
                                     <span className="text-[10px] font-bold text-slate-400">{accessLogs.length} usuários</span>
                                 </div>
                                 <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                                    {accessSource && (
+                                        <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                                            {accessSource}
+                                        </p>
+                                    )}
                                     {logsLoading ? (
                                         <p className="text-[11px] text-muted-foreground italic">Carregando...</p>
                                     ) : accessLogs.length === 0 ? (
                                         <p className="text-[11px] text-muted-foreground italic">Nenhum acesso registrado neste período.</p>
                                     ) : accessLogs.map(log => {
-                                        const isOnline = onlineUsers.some(u => u.id === log.user_id);
+                                        const isOnline = uniqueOnlineUsers.some(u => u.id === log.user_id);
                                         const ts = new Date(log.accessed_at);
                                         const isToday = ts.toDateString() === new Date().toDateString();
                                         const label = isToday
@@ -457,7 +457,7 @@ export default function AdminPage() {
                                 </thead>
                                 <tbody>
                                     {teamMembers.map((u, idx) => (
-                                        <tr key={u.id} className={`border-b border-slate-100 dark:border-slate-800 hover:bg-amber-50/40 dark:hover:bg-slate-800/50 transition-colors ${idx % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-slate-50/50 dark:bg-slate-900/20'}`}>
+                                        <tr key={u.adminKey} className={`border-b border-slate-100 dark:border-slate-800 hover:bg-amber-50/40 dark:hover:bg-slate-800/50 transition-colors ${idx % 2 === 0 ? 'bg-white dark:bg-transparent' : 'bg-slate-50/50 dark:bg-slate-900/20'}`}>
                                             {/* Nome */}
                                             <td className="px-4 py-2">
                                                 <div className="flex items-center gap-2">
@@ -589,7 +589,7 @@ export default function AdminPage() {
                                     {allProfiles
                                         .filter(p => !teamMembers.some(m => m.email?.toLowerCase().trim() === p.email?.toLowerCase().trim()))
                                         .map((visitor, idx) => (
-                                            <tr key={visitor.id} className={`border-b border-slate-100 dark:border-slate-800 opacity-70 ${idx === 0 ? 'border-t-2 border-t-slate-200 dark:border-t-slate-700' : ''}`}>
+                                            <tr key={`visitor-${visitor.id || visitor.email}`} className={`border-b border-slate-100 dark:border-slate-800 opacity-70 ${idx === 0 ? 'border-t-2 border-t-slate-200 dark:border-t-slate-700' : ''}`}>
                                                 {/* Nome visitante */}
                                                 <td className="px-4 py-2">
                                                     <div className="flex items-center gap-2">
@@ -692,7 +692,7 @@ export default function AdminPage() {
                             <div className="space-y-2">
                                 <Label htmlFor="user-select">Selecionar Usuário</Label>
                                 <select id="user-select" className="w-full p-2 bg-white dark:bg-gray-800 border rounded-md">
-                                    {teamMembers.map(u => <option key={u.id} value={u.id}>{u.full_name || u.name}</option>)}
+                                    {teamMembers.map(u => <option key={u.adminKey} value={u.id}>{u.full_name || u.name}</option>)}
                                 </select>
                             </div>
                             <div className="space-y-2">

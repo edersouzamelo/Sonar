@@ -11,6 +11,14 @@ if (process.env.NODE_ENV !== 'production') {
 const BUCKET = 'service-orders';
 const openAiApiKey = process.env.SONAR_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
 type AIDeadline = { due_date: string; title?: string };
+type AIMetadata = {
+    order_number?: string | null;
+    subject?: string | null;
+    issuing_body?: string | null;
+    responsible?: string | null;
+    priority?: string | null;
+    tags?: string[];
+};
 
 const getResponseOutputText = (payload: any): string => {
     if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
@@ -355,6 +363,80 @@ const extractDocumentTextWithOpenAI = async (buffer: Buffer, fileName: string, m
     }
 };
 
+const inferServiceOrderMetadataFromFilename = (fileName: string): AIMetadata => {
+    const baseName = fileName.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+    const orderNumber = baseName.match(/\b(?:os|ordem|op|n[ºo.]?)?\s*(\d{1,5}(?:[./-]\d{2,4})?)\b/i)?.[1] || null;
+    return {
+        order_number: orderNumber,
+        subject: baseName || null,
+        tags: ['ordem de servico'],
+    };
+};
+
+const inferServiceOrderMetadataWithOpenAI = async (text: string, fileName: string): Promise<AIMetadata> => {
+    const fallback = inferServiceOrderMetadataFromFilename(fileName);
+    if (!openAiApiKey || text.trim().length < 80) return fallback;
+
+    try {
+        const response = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${openAiApiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'gpt-4.1-mini',
+                input: [
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'input_text',
+                                text: [
+                                    'Analise a Ordem de Servico abaixo e extraia metadados objetivos.',
+                                    'Retorne SOMENTE JSON valido no formato:',
+                                    '{"order_number":"texto ou null","subject":"texto curto","issuing_body":"texto ou null","responsible":"texto ou null","priority":"baixa|normal|alta|urgente|null","tags":["tag1","tag2"]}.',
+                                    'Nao invente dados. Se nao houver certeza, use null. Tags devem ser curtas, em portugues, sem repetir.',
+                                    `Nome do arquivo: ${fileName}`,
+                                    `Texto extraido: ${text.slice(0, 12000)}`,
+                                ].join('\n\n'),
+                            },
+                        ],
+                    },
+                ],
+            }),
+        });
+
+        if (!response.ok) return fallback;
+        const json = await response.json();
+        const outputText = getResponseOutputText(json)
+            .replace(/^```json/i, '')
+            .replace(/^```/i, '')
+            .replace(/```$/i, '')
+            .trim();
+        const parsed = JSON.parse(outputText);
+        const parsedTags: string[] = Array.isArray(parsed?.tags)
+            ? Array.from(new Set<string>(
+                parsed.tags
+                    .filter((tag: any) => typeof tag === 'string')
+                    .map((tag: string) => tag.trim().toLowerCase())
+                    .filter(Boolean)
+            )).slice(0, 8)
+            : (fallback.tags || []);
+
+        return {
+            order_number: typeof parsed?.order_number === 'string' ? parsed.order_number.trim() : fallback.order_number,
+            subject: typeof parsed?.subject === 'string' ? parsed.subject.trim() : fallback.subject,
+            issuing_body: typeof parsed?.issuing_body === 'string' ? parsed.issuing_body.trim() : null,
+            responsible: typeof parsed?.responsible === 'string' ? parsed.responsible.trim() : null,
+            priority: typeof parsed?.priority === 'string' ? parsed.priority.trim().toLowerCase() : null,
+            tags: parsedTags,
+        };
+    } catch {
+        return fallback;
+    }
+};
+
 const ensureBucket = async (admin: ReturnType<typeof getAdminClient>) => {
     const { data } = await admin.storage.listBuckets();
     if (!data?.some(bucket => bucket.id === BUCKET)) {
@@ -382,9 +464,45 @@ const mapOrder = async (storageClient: ReturnType<typeof getUserClient>, order: 
         type: order.mime_type || 'arquivo',
         uploadedAt: order.uploaded_at,
         uploadedBy: order.uploaded_by,
+        orderNumber: order.order_number || '',
+        subject: order.subject || '',
+        issuingBody: order.issuing_body || '',
+        responsible: order.responsible || '',
+        priority: order.priority || '',
+        tags: Array.isArray(order.tags) ? order.tags : [],
         downloadUrl: signed?.signedUrl || '',
         deadlines,
     };
+};
+
+const insertOrUpdateOrder = async (
+    userClient: ReturnType<typeof getUserClient>,
+    existingId: string,
+    payload: Record<string, any>
+) => {
+    const runQuery = (data: Record<string, any>) => existingId
+        ? userClient.from('service_orders').update(data).eq('id', existingId).select('*, service_order_deadlines(*)').single()
+        : userClient.from('service_orders').insert(data).select('*, service_order_deadlines(*)').single();
+
+    const firstAttempt = await runQuery(payload);
+    if (!firstAttempt.error) return firstAttempt;
+
+    const message = firstAttempt.error.message || '';
+    const isMissingMetadataColumn =
+        firstAttempt.error.code === 'PGRST204' ||
+        /schema cache|Could not find .* column/i.test(message);
+
+    if (!isMissingMetadataColumn) return firstAttempt;
+
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.order_number;
+    delete fallbackPayload.subject;
+    delete fallbackPayload.issuing_body;
+    delete fallbackPayload.responsible;
+    delete fallbackPayload.priority;
+    delete fallbackPayload.tags;
+
+    return runQuery(fallbackPayload);
 };
 
 export async function GET(req: NextRequest) {
@@ -451,6 +569,7 @@ export async function POST(req: NextRequest) {
             ? await extractDocumentTextWithOpenAI(buffer, file.name, file.type || 'application/pdf')
             : '';
         const extractedText = (localExtractedText.trim() || aiExtractedText.trim()).slice(0, 20000);
+        const inferredMetadata = await inferServiceOrderMetadataWithOpenAI(extractedText, file.name);
         const orderPayload = {
             file_name: file.name,
             file_path: path,
@@ -459,16 +578,18 @@ export async function POST(req: NextRequest) {
             uploaded_by: user.email!,
             uploaded_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            order_number: inferredMetadata.order_number || null,
+            subject: inferredMetadata.subject || null,
+            issuing_body: inferredMetadata.issuing_body || null,
+            responsible: inferredMetadata.responsible || null,
+            priority: inferredMetadata.priority || null,
+            tags: inferredMetadata.tags || [],
             extracted_text: extractedText,
             file_data_base64: uploadError ? buffer.toString('base64') : null,
             file_data_mime: uploadError ? (file.type || 'application/octet-stream') : null,
         };
 
-        const orderQuery = existingId
-            ? userClient.from('service_orders').update(orderPayload).eq('id', existingId).select('*, service_order_deadlines(*)').single()
-            : userClient.from('service_orders').insert(orderPayload).select('*, service_order_deadlines(*)').single();
-
-        const { data: order, error: orderError } = await orderQuery;
+        const { data: order, error: orderError } = await insertOrUpdateOrder(userClient, existingId, orderPayload);
         if (orderError) throw orderError;
 
         await userClient.from('service_order_deadlines').delete().eq('service_order_id', order.id);

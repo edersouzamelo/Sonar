@@ -122,7 +122,8 @@ export function TendersProvider({ children }: { children: ReactNode }) {
         totalTenders: 0,
         totalDates: 0,
         totalPeople: 0,
-        status: 'offline'
+        status: 'syncing',
+        message: 'Verificando conexao com o Supabase'
     });
 
     const isCloudLoaded = useRef(false);
@@ -130,7 +131,14 @@ export function TendersProvider({ children }: { children: ReactNode }) {
     const autoSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const loadDataFromCloud = useCallback(async (skipGoldCheck: boolean = false) => {
-        if (!supabase) return;
+        if (!supabase) {
+            setCloudStatus(prev => ({ ...prev, status: 'offline', isConnected: false, message: 'Supabase nao configurado.' }));
+            return;
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setCloudStatus(prev => ({ ...prev, status: 'offline', isConnected: false, message: 'Sem acesso a internet.' }));
+            return;
+        }
         setCloudStatus(prev => ({ ...prev, status: 'syncing' }));
         console.log("[Radar] Buscando dados da nuvem para unificação...");
         try {
@@ -236,7 +244,14 @@ export function TendersProvider({ children }: { children: ReactNode }) {
 
     // --- DATA SYNC LOGIC (PUSH) ---
     const pushDataToCloud = useCallback(async () => {
-        if (!supabase) return;
+        if (!supabase) {
+            setCloudStatus(prev => ({ ...prev, status: 'offline', isConnected: false, message: 'Supabase nao configurado.' }));
+            return;
+        }
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            setCloudStatus(prev => ({ ...prev, status: 'offline', isConnected: false, message: 'Sem acesso a internet.' }));
+            return;
+        }
         setCloudStatus(prev => ({ ...prev, status: 'syncing' }));
         try {
             // 1. Salvar Equipe

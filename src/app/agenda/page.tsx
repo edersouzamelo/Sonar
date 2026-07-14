@@ -26,6 +26,7 @@ import { AgendaEvent, Person } from "@/types"
 import { generateAgendaReport } from "@/lib/report-utils"
 import { FileDown, MessageSquare } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import { supplyClasses } from "@/lib/supply-classes"
 
 
 
@@ -34,32 +35,58 @@ export default function AgendaPage() {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
     const [searchQuery, setSearchQuery] = useState("")
     const [serviceOrderEvents, setServiceOrderEvents] = useState<Array<{ id: string; title: string; date: string; sourceFile: string; sourceOrderId: string }>>([])
+    const [consolidationEvents, setConsolidationEvents] = useState<Array<{ id: string; name: string; dueDate: string; scope: string; classKey: string; classLabel: string; shortLabel: string }>>([])
     const router = useRouter()
 
     const today = startOfDay(new Date())
 
     useEffect(() => {
-        const loadServiceOrderEvents = () => {
+        const loadAgendaSources = () => {
             supabase.auth.refreshSession().then(async ({ data: refreshed }) => {
                 const session = refreshed.session || (await supabase.auth.getSession()).data.session;
                 if (!session?.access_token) return;
 
                 try {
-                    const response = await fetch('/api/service-orders', {
-                        headers: { Authorization: `Bearer ${session.access_token}` }
-                    });
-                    const result = await response.json();
-                    if (!response.ok) throw new Error(result.error || 'Falha ao carregar prazos de OS.');
+                    const headers = { Authorization: `Bearer ${session.access_token}` };
+                    const [serviceOrdersResponse, ...consolidationsResponses] = await Promise.all([
+                        fetch('/api/service-orders', { headers }),
+                        ...supplyClasses.map(supplyClass =>
+                            fetch(`/api/classes/consolidations?classKey=${supplyClass.key}`, { headers })
+                        ),
+                    ]);
 
-                    setServiceOrderEvents((result.orders || []).flatMap((order: any) => order.deadlines || []));
+                    const serviceOrdersResult = await serviceOrdersResponse.json();
+                    if (!serviceOrdersResponse.ok) throw new Error(serviceOrdersResult.error || 'Falha ao carregar prazos de OS.');
+                    setServiceOrderEvents((serviceOrdersResult.orders || []).flatMap((order: any) => order.deadlines || []));
+
+                    const consolidationPayloads = await Promise.all(consolidationsResponses.map(async (response, index) => {
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error || `Falha ao carregar prazos de ${supplyClasses[index].label}.`);
+                        return { result, supplyClass: supplyClasses[index] };
+                    }));
+
+                    setConsolidationEvents(consolidationPayloads.flatMap(({ result, supplyClass }) =>
+                        (result.columns || [])
+                            .filter((column: any) => column.due_date)
+                            .map((column: any) => ({
+                                id: column.id,
+                                name: column.name,
+                                dueDate: column.due_date,
+                                scope: column.consolidation_scope === 'command' ? 'Por Cmdo' : 'Por OM',
+                                classKey: supplyClass.key,
+                                classLabel: supplyClass.label,
+                                shortLabel: supplyClass.shortLabel,
+                            }))
+                    ));
                 } catch (error) {
-                    console.warn('[Agenda] Falha ao carregar prazos de OS:', error);
+                    console.warn('[Agenda] Falha ao carregar fontes da agenda:', error);
                     setServiceOrderEvents([]);
+                    setConsolidationEvents([]);
                 }
             });
         };
 
-        loadServiceOrderEvents();
+        loadAgendaSources();
     }, []);
 
     // Mapeamento extensivo de todas as datas do sistema
@@ -144,14 +171,42 @@ export default function AgendaPage() {
             }
         });
 
+        consolidationEvents.forEach(consolidationEvent => {
+            try {
+                const date = startOfDay(parseISO(consolidationEvent.dueDate));
+                if (!isValid(date)) return;
+
+                const isOverdue = isBefore(date, today);
+                events.push({
+                    id: `class-consolidation-${consolidationEvent.id}`,
+                    tenderId: consolidationEvent.classKey,
+                    tenderNumber: "Consolidacoes",
+                    uasg: consolidationEvent.shortLabel,
+                    label: `Prazo: ${consolidationEvent.name}`,
+                    date,
+                    type: "deadline",
+                    isOk: false,
+                    isOverdue,
+                    tenderStatus: `Consolidacoes ${consolidationEvent.shortLabel}`,
+                    description: `${consolidationEvent.classLabel} - Demanda ${consolidationEvent.scope}`,
+                    requesterSector: "CMO",
+                    daysDiff: differenceInDays(today, date)
+                });
+            } catch (e) {
+                console.error("Erro ao processar prazo de Consolidacoes:", consolidationEvent.dueDate);
+            }
+        });
+
         return events.sort((a, b) => a.date.getTime() - b.date.getTime())
-    }, [tenders, dateChecks, serviceOrderEvents, today])
+    }, [tenders, dateChecks, serviceOrderEvents, consolidationEvents, today])
 
     // Filtragem por busca
     const filteredEvents = allEvents.filter(e =>
         e.tenderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         e.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.uasg.toLowerCase().includes(searchQuery.toLowerCase())
+        e.uasg.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.tenderStatus.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     // Separação das colunas
@@ -292,7 +347,11 @@ export default function AgendaPage() {
                         className="w-5 h-5 text-red-500 cursor-pointer hover:scale-125 transition-transform"
                         onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/tenders?highlightId=${event.tenderId}`);
+                            if (event.id.startsWith("class-consolidation-")) {
+                                router.push(`/classes/consolidacoes?classe=${event.tenderId}`);
+                            } else {
+                                router.push(`/tenders?highlightId=${event.tenderId}`);
+                            }
                         }}
                     />
                 ) : (
