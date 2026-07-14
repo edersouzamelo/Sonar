@@ -7,6 +7,46 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { ArrowLeft, Banknote, BarChart3, CircleDollarSign, ClipboardList, FileSpreadsheet, FileText, TrendingUp, UploadCloud, HelpCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { defaultSupplyClassKey, getSupplyClass } from "@/lib/supply-classes";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+
+
+const DonutChart = ({ value, total, color, bg = "#f1f5f9" }: { value: number, total: number, color: string, bg?: string }) => {
+    const data = [
+        { name: 'Valor', value: value },
+        { name: 'Restante', value: total > value ? total - value : 0 }
+    ];
+    if (total === 0 && value === 0) {
+        data[1].value = 1;
+    }
+    
+    return (
+        <div className="h-16 w-16 shrink-0 relative">
+            <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={18}
+                        outerRadius={26}
+                        startAngle={90}
+                        endAngle={-270}
+                        dataKey="value"
+                        stroke="none"
+                    >
+                        <Cell fill={total === 0 && value === 0 ? bg : color} />
+                        <Cell fill={bg} />
+                    </Pie>
+                </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[9px] font-black text-slate-500">
+                    {total > 0 ? Math.round((value / total) * 100) : 0}%
+                </span>
+            </div>
+        </div>
+    );
+};
 
 const budgetAreas = [
     {

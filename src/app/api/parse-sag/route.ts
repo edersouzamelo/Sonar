@@ -11,6 +11,10 @@ export async function POST(req: Request) {
         const files = formData.getAll('file') as File[];
         
         let totalDisponivel = 0;
+        let totalALiquidar = 0;
+        let totalEmLiquidacao = 0;
+        let totalLiquidado = 0;
+        let totalPago = 0;
 
         for (const file of files) {
             const buffer = Buffer.from(await file.arrayBuffer());
@@ -25,11 +29,15 @@ export async function POST(req: Request) {
                 const regex = /((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})((?:\d{1,3}\.)*\d+,\d{2})/g;
                 let match;
                 while ((match = regex.exec(text)) !== null) {
-                    const valueStr = match[1].replace(/\./g, '').replace(',', '.');
-                    const value = parseFloat(valueStr);
-                    if (!isNaN(value)) {
-                        totalDisponivel += value;
-                    }
+                    const parseVal = (str: string) => {
+                        const val = parseFloat(str.replace(/\./g, '').replace(',', '.'));
+                        return isNaN(val) ? 0 : val;
+                    };
+                    totalDisponivel += parseVal(match[1]);
+                    totalALiquidar += parseVal(match[2]);
+                    totalEmLiquidacao += parseVal(match[3]);
+                    totalLiquidado += parseVal(match[4]);
+                    totalPago += parseVal(match[5]);
                 }
             } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
                 const workbook = xlsx.read(buffer, { type: 'buffer' });
@@ -38,34 +46,57 @@ export async function POST(req: Request) {
                 const jsonData = xlsx.utils.sheet_to_json<any>(worksheet, { header: 1 });
                 
                 let disponivelIndex = -1;
+                let aLiquidarIndex = -1;
+                let emLiquidacaoIndex = -1;
+                let liquidadoIndex = -1;
+                let pagoIndex = -1;
                 
                 for (let i = 0; i < jsonData.length; i++) {
                     const row = jsonData[i] as string[];
                     // Find header row
                     if (disponivelIndex === -1) {
                         for (let j = 0; j < row.length; j++) {
-                            if (typeof row[j] === 'string' && row[j].toUpperCase().includes('DISPONIVEL')) {
-                                disponivelIndex = j;
-                                break;
+                            if (typeof row[j] === 'string') {
+                                const header = row[j].toUpperCase();
+                                if (header.includes('DISPONIVEL') || header.includes('DISPONÍVEL')) disponivelIndex = j;
+                                else if (header.includes('A LIQUIDAR')) aLiquidarIndex = j;
+                                else if (header.includes('EM LIQUIDACAO') || header.includes('EM LIQUIDAÇÃO')) emLiquidacaoIndex = j;
+                                else if (header.includes('LIQUIDADO')) liquidadoIndex = j;
+                                else if (header.includes('PAGO')) pagoIndex = j;
                             }
                         }
                     } else {
                         // Data row
-                        if (row && row.length > disponivelIndex) {
-                            let val = row[disponivelIndex];
-                            if (typeof val === 'number') {
-                                totalDisponivel += val;
-                            } else if (typeof val === 'string') {
-                                const parsedVal = parseFloat(val.replace(/\./g, '').replace(',', '.'));
-                                if (!isNaN(parsedVal)) totalDisponivel += parsedVal;
+                        const parseExcelVal = (idx: number) => {
+                            if (idx === -1) return 0;
+                            if (row && row.length > idx) {
+                                let val = row[idx];
+                                if (typeof val === 'number') return val;
+                                if (typeof val === 'string') {
+                                    const parsedVal = parseFloat(val.replace(/\./g, '').replace(',', '.'));
+                                    if (!isNaN(parsedVal)) return parsedVal;
+                                }
                             }
-                        }
+                            return 0;
+                        };
+
+                        totalDisponivel += parseExcelVal(disponivelIndex);
+                        totalALiquidar += parseExcelVal(aLiquidarIndex);
+                        totalEmLiquidacao += parseExcelVal(emLiquidacaoIndex);
+                        totalLiquidado += parseExcelVal(liquidadoIndex);
+                        totalPago += parseExcelVal(pagoIndex);
                     }
                 }
             }
         }
 
-        return NextResponse.json({ totalDisponivel });
+        return NextResponse.json({ 
+            totalDisponivel,
+            totalALiquidar,
+            totalEmLiquidacao,
+            totalLiquidado,
+            totalPago
+        });
 
     } catch (error) {
         console.error('Error parsing SAG file:', error);
