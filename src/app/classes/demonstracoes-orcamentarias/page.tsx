@@ -76,21 +76,21 @@ const classeIIBudgetRows = [
     {
         scope: "ambito CMO",
         cards: [
-            { label: "Total de recursos recebidos para Classe II ambito CMO", icon: Banknote, tone: "bg-emerald-50 text-emerald-700" },
-            { label: "Total de creditos disponiveis de Classe II ambito CMO", icon: ClipboardList, tone: "bg-cyan-50 text-cyan-700" },
-            { label: "Total de recursos empenhados em Classe II ambito CMO", icon: TrendingUp, tone: "bg-blue-50 text-blue-700" },
-            { label: "Total de recursos a liquidar para Classe II ambito CMO", icon: BarChart3, tone: "bg-violet-50 text-violet-700" },
-            { label: "Total de recursos liquidados e pagos para Classe II ambito CMO", icon: CircleDollarSign, tone: "bg-amber-50 text-amber-700" },
+            { key: "recebido", label: "Total de recursos recebidos para Classe II ambito CMO", icon: Banknote, tone: "bg-emerald-50 text-emerald-700", color: "#10b981" },
+            { key: "disponivel", label: "Total de creditos disponiveis de Classe II ambito CMO", icon: ClipboardList, tone: "bg-cyan-50 text-cyan-700", color: "#06b6d4" },
+            { key: "empenhado", label: "Total de recursos empenhados em Classe II ambito CMO", icon: TrendingUp, tone: "bg-blue-50 text-blue-700", color: "#3b82f6" },
+            { key: "aLiquidar", label: "Total de recursos a liquidar para Classe II ambito CMO", icon: BarChart3, tone: "bg-violet-50 text-violet-700", color: "#8b5cf6" },
+            { key: "liquidado", label: "Total de recursos liquidados e pagos para Classe II ambito CMO", icon: CircleDollarSign, tone: "bg-amber-50 text-amber-700", color: "#f59e0b" },
         ],
     },
     {
         scope: "ambito 9o Gpt Log",
         cards: [
-            { label: "Total de recursos recebidos para Classe II ambito 9o Gpt Log", icon: Banknote, tone: "bg-emerald-50 text-emerald-700" },
-            { label: "Total de creditos disponiveis Classe II ambito 9o Gpt Log", icon: ClipboardList, tone: "bg-cyan-50 text-cyan-700" },
-            { label: "Total de recursos empenhados em Classe II ambito 9o Gpt Log", icon: TrendingUp, tone: "bg-blue-50 text-blue-700" },
-            { label: "Total de recursos a liquidar para Classe II ambito 9o Gpt Log", icon: BarChart3, tone: "bg-violet-50 text-violet-700" },
-            { label: "Total de recursos liquidados e pagos para Classe II ambito 9o Gpt Log", icon: CircleDollarSign, tone: "bg-amber-50 text-amber-700" },
+            { key: "recebido", label: "Total de recursos recebidos para Classe II ambito 9o Gpt Log", icon: Banknote, tone: "bg-emerald-50 text-emerald-700", color: "#10b981" },
+            { key: "disponivel", label: "Total de creditos disponiveis Classe II ambito 9o Gpt Log", icon: ClipboardList, tone: "bg-cyan-50 text-cyan-700", color: "#06b6d4" },
+            { key: "empenhado", label: "Total de recursos empenhados em Classe II ambito 9o Gpt Log", icon: TrendingUp, tone: "bg-blue-50 text-blue-700", color: "#3b82f6" },
+            { key: "aLiquidar", label: "Total de recursos a liquidar para Classe II ambito 9o Gpt Log", icon: BarChart3, tone: "bg-violet-50 text-violet-700", color: "#8b5cf6" },
+            { key: "liquidado", label: "Total de recursos liquidados e pagos para Classe II ambito 9o Gpt Log", icon: CircleDollarSign, tone: "bg-amber-50 text-amber-700", color: "#f59e0b" },
         ],
     },
 ];
@@ -117,15 +117,40 @@ export default function DemonstracoesOrcamentariasPage() {
     const sagInputRef = useRef<HTMLInputElement | null>(null);
     const [sagUploads, setSagUploads] = useState<SagUpload[]>([]);
     const latestSagUpload = useMemo(() => sagUploads[0], [sagUploads]);
-    const [totalDisponivelCmo, setTotalDisponivelCmo] = useState<number | null>(null);
-    const [lastUploadDate, setLastUploadDate] = useState<string | null>(null);
+    type CmoBudgetData = {
+        totalDisponivel: number;
+        totalALiquidar: number;
+        totalEmLiquidacao: number;
+        totalLiquidado: number;
+        totalPago: number;
+        lastUpdate: string;
+    };
+    const [cmoBudgetData, setCmoBudgetData] = useState<CmoBudgetData | null>(null);
 
     useEffect(() => {
-        const storedTotal = localStorage.getItem('totalDisponivelCmo');
-        const storedDate = localStorage.getItem('lastUploadDateCmo');
-        if (storedTotal) setTotalDisponivelCmo(parseFloat(storedTotal));
-        if (storedDate) setLastUploadDate(storedDate);
+        const stored = localStorage.getItem('sonar_cmo_budget_data');
+        if (stored) {
+            try { setCmoBudgetData(JSON.parse(stored)); } catch(e) {}
+        }
     }, []);
+
+    const derivedCmo = useMemo(() => {
+        if (!cmoBudgetData) return null;
+        const disp = cmoBudgetData.totalDisponivel;
+        const aLiq = cmoBudgetData.totalALiquidar + cmoBudgetData.totalEmLiquidacao;
+        const liq = cmoBudgetData.totalLiquidado + cmoBudgetData.totalPago;
+        const emp = aLiq + liq;
+        const rec = disp + emp;
+
+        return {
+            disponivel: disp,
+            aLiquidar: aLiq,
+            liquidado: liq,
+            empenhado: emp,
+            recebido: rec,
+            lastUpdate: cmoBudgetData.lastUpdate
+        };
+    }, [cmoBudgetData]);
 
     const handleSagUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files || []);
@@ -162,11 +187,16 @@ export default function DemonstracoesOrcamentariasPage() {
 
             if (res.ok) {
                 const data = await res.json();
-                setTotalDisponivelCmo(data.totalDisponivel);
-                const now = new Date().toISOString();
-                setLastUploadDate(now);
-                localStorage.setItem('totalDisponivelCmo', data.totalDisponivel.toString());
-                localStorage.setItem('lastUploadDateCmo', now);
+                const newData: CmoBudgetData = {
+                    totalDisponivel: data.totalDisponivel || 0,
+                    totalALiquidar: data.totalALiquidar || 0,
+                    totalEmLiquidacao: data.totalEmLiquidacao || 0,
+                    totalLiquidado: data.totalLiquidado || 0,
+                    totalPago: data.totalPago || 0,
+                    lastUpdate: new Date().toISOString()
+                };
+                setCmoBudgetData(newData);
+                localStorage.setItem('sonar_cmo_budget_data', JSON.stringify(newData));
                 
                 setSagUploads(current => current.map(u => 
                     uploads.find(up => up.id === u.id) ? { ...u, status: "Processado" as const } : u
@@ -308,18 +338,27 @@ export default function DemonstracoesOrcamentariasPage() {
                                                         )}
                                                     </div>
                                                     <p className="mt-3 text-2xl font-black text-radar-dark">
-                                                        {item.label === "Total de creditos disponiveis de Classe II ambito CMO" && totalDisponivelCmo !== null 
-                                                            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalDisponivelCmo)
+                                                        {row.scope === "ambito CMO" && derivedCmo !== null 
+                                                            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(derivedCmo[item.key as keyof typeof derivedCmo] as number)
                                                             : "A informar"}
                                                     </p>
-                                                    {item.label === "Total de creditos disponiveis de Classe II ambito CMO" && lastUploadDate && (
+                                                    {item.label === "Total de creditos disponiveis de Classe II ambito CMO" && derivedCmo && (
                                                         <p className="mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                                            Última atualização: {new Date(lastUploadDate).toLocaleDateString("pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                            Última atualização: {new Date(derivedCmo.lastUpdate).toLocaleDateString("pt-BR", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                         </p>
                                                     )}
                                                 </div>
-                                                <div className={`shrink-0 rounded-lg p-2 ${item.tone}`}>
-                                                    <Icon className="h-5 w-5" />
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <div className={`shrink-0 rounded-lg p-2 ${item.tone}`}>
+                                                        <Icon className="h-5 w-5" />
+                                                    </div>
+                                                    {row.scope === "ambito CMO" && derivedCmo !== null && item.key !== "recebido" && (
+                                                        <DonutChart 
+                                                            value={derivedCmo[item.key as keyof typeof derivedCmo] as number}
+                                                            total={item.key === 'aLiquidar' || item.key === 'liquidado' ? derivedCmo.empenhado : derivedCmo.recebido}
+                                                            color={item.color as string}
+                                                        />
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
