@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+// @ts-ignore
 import pdfParse from 'pdf-parse';
 import * as xlsx from 'xlsx';
 
