@@ -89,7 +89,12 @@ export default function DemonstracoesOrcamentariasPage() {
 
     const handleSagUpload = async (event: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files || []);
-        event.target.value = "";
+        if (event.target) event.target.value = "";
+        if (!files.length) return;
+        await processFiles(files);
+    };
+
+    const processFiles = async (files: File[]) => {
         if (!files.length) return;
 
         const uploads = files.map(file => ({
@@ -177,7 +182,17 @@ export default function DemonstracoesOrcamentariasPage() {
                                 </button>
                             </div>
 
-                            <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4">
+                            <div 
+                                className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 transition-colors hover:bg-slate-100 cursor-pointer"
+                                onClick={() => sagInputRef.current?.click()}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                                        processFiles(Array.from(e.dataTransfer.files));
+                                    }
+                                }}
+                            >
                                 {latestSagUpload ? (
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="flex min-w-0 items-center gap-3">
