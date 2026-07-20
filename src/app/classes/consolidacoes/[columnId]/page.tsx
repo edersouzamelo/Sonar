@@ -84,14 +84,21 @@ export default function ConsolidationStatusPage() {
         return map;
     }, [files, columnId]);
 
-    const statusRows = useMemo(() => organizations.map(organization => {
-        const rowFiles = filesByRow.get(organization.id) || filesByRow.get(legacyIdByOrganizationId.get(organization.id) || "") || [];
-        return {
-            organization,
-            files: rowFiles,
-            received: rowFiles.length > 0,
-        };
-    }), [organizations, filesByRow, legacyIdByOrganizationId]);
+    const statusRows = useMemo(() => {
+        const isCommandScope = column?.consolidation_scope === "command";
+        const relevantOrgs = isCommandScope 
+            ? organizationGroups.map(group => group.units[0]).filter(Boolean)
+            : organizations;
+
+        return relevantOrgs.map(organization => {
+            const rowFiles = filesByRow.get(organization.id) || filesByRow.get(legacyIdByOrganizationId.get(organization.id) || "") || [];
+            return {
+                organization,
+                files: rowFiles,
+                received: rowFiles.length > 0,
+            };
+        });
+    }, [organizations, organizationGroups, filesByRow, legacyIdByOrganizationId, column?.consolidation_scope]);
 
     const receivedRows = statusRows.filter(row => row.received);
     const pendingRows = statusRows.filter(row => !row.received);
@@ -217,10 +224,14 @@ export default function ConsolidationStatusPage() {
                                             <h2 className="text-sm font-black uppercase tracking-wide text-radar-dark">{group.name}</h2>
                                             <p className="text-xs font-semibold text-slate-500">{group.location}</p>
                                         </div>
-                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500">{group.units.length} OM</span>
+                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500">
+                                            {column.consolidation_scope === "command" ? 1 : group.units.length} OM{column.consolidation_scope === "command" ? "" : "s"}
+                                        </span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-                                        {group.units.map(organization => {
+                                        {group.units.map((organization, index) => {
+                                            if (column.consolidation_scope === "command" && index !== 0) return null;
+                                            
                                             const rowFiles = filesByRow.get(organization.id) || filesByRow.get(legacyIdByOrganizationId.get(organization.id) || "") || [];
                                             const received = rowFiles.length > 0;
 

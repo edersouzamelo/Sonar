@@ -127,7 +127,16 @@ export default function ConsolidacoesPage() {
         });
         return visibleCells.size;
     }, [files, activeColumnIds]);
-    const totalCells = organizations.length * Math.max(columns.length, 1);
+    
+    const totalCells = useMemo(() => {
+        if (columns.length === 0) return organizations.length;
+        return columns.reduce((total, col) => {
+            if (col.consolidation_scope === "command") {
+                return total + organizationGroups.length;
+            }
+            return total + organizations.length;
+        }, 0);
+    }, [columns, organizations.length, organizationGroups.length]);
 
     const loadData = async () => {
         setLoading(true);
@@ -521,8 +530,8 @@ export default function ConsolidacoesPage() {
 
         if (disabled) {
             return (
-                <div className="flex h-full min-h-14 items-center justify-center rounded-lg border border-slate-200 bg-slate-200/70 px-3 text-center text-xs font-bold text-slate-400">
-                    Travado por Cmdo
+                <div className="flex h-full min-h-14 items-center justify-center rounded-lg border border-transparent bg-transparent px-3 text-center text-xs font-bold text-slate-400">
+                    {/* Empty cell for subordinate OMs in "Por Cmdo" scope */}
                 </div>
             );
         }
