@@ -383,18 +383,30 @@ export default function ConsolidationStatusPage() {
                                     </h1>
                                     <p className="mt-2 text-sm font-bold text-slate-500">Prazo até {formatDate(column.due_date)}</p>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 text-center">
-                                    <div className="rounded-lg border border-lime-200 bg-lime-50 px-4 py-3">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-lime-700">Recebidas</p>
-                                        <p className="mt-1 text-2xl font-black text-lime-700">{receivedRows.length}</p>
-                                    </div>
-                                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Pendentes</p>
-                                        <p className="mt-1 text-2xl font-black text-slate-600">{pendingRows.length}</p>
-                                    </div>
-                                    <div className="rounded-lg border border-radar-gold/40 bg-amber-50 px-4 py-3">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Avanço</p>
-                                        <p className="mt-1 text-2xl font-black text-amber-700">{completionRate}%</p>
+                                <div className="flex flex-col sm:flex-row gap-4 lg:w-auto w-full lg:shrink-0">
+                                    <div className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                                        <div className="flex flex-col gap-1 w-full min-w-[220px]">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Progresso da Demanda</span>
+                                            <div className="flex items-center gap-4 mt-1">
+                                                <span className="text-4xl font-black tracking-tight text-slate-800">{completionRate}%</span>
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-lime-600">
+                                                        <div className="h-2 w-2 rounded-full bg-lime-500 shadow-[0_0_8px_rgba(132,204,22,0.6)]" />
+                                                        {receivedRows.length} Recebidas
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400">
+                                                        <div className="h-2 w-2 rounded-full bg-slate-300" />
+                                                        {pendingRows.length} Pendentes
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                                                <div 
+                                                    className="h-full rounded-full bg-gradient-to-r from-lime-400 to-lime-500 transition-all duration-1000 ease-out" 
+                                                    style={{ width: `${completionRate}%` }} 
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -446,7 +458,7 @@ export default function ConsolidationStatusPage() {
                                     type="button"
                                     onClick={downloadConsolidated}
                                     disabled={isZipping}
-                                    className="inline-flex items-center gap-2 rounded-full bg-radar-dark px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                    className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg transition-all hover:bg-slate-800 hover:shadow-xl hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-md"
                                 >
                                     {isZipping ? (
                                         <><Loader2 className="h-4 w-4 animate-spin" /> Compactando arquivos...</>
