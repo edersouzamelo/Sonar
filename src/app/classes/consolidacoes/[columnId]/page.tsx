@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Download, FileText, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { ArrowLeft, CheckCircle2, Download, FileText, Loader2, UploadCloud, Archive } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { CmoOrganizationGroup, cmoOrganizationGroups } from "@/lib/cmo-organizations";
 import { cn } from "@/lib/utils";
 import { defaultSupplyClassKey, getSupplyClass } from "@/lib/supply-classes";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
 type ConsolidationColumn = {
     id: string;
@@ -66,6 +68,12 @@ export default function ConsolidationStatusPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+    const [isZipping, setIsZipping] = useState(false);
+    
+    // Upload state
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [activeUploadRow, setActiveUploadRow] = useState<{ id: string, name: string } | null>(null);
+    const [uploadingRowId, setUploadingRowId] = useState<string | null>(null);
 
     const organizations = useMemo(() => organizationGroups.flatMap(group => group.units), [organizationGroups]);
     const legacyIdByOrganizationId = useMemo(() => {
@@ -165,6 +173,113 @@ export default function ConsolidationStatusPage() {
         }
     };
 
+    const downloadConsolidated = async () => {
+        if (!filesByRow.size) return;
+        setIsZipping(true);
+        setError("");
+        try {
+            const token = await getToken();
+            const zip = new JSZip();
+            
+            const filePromises = files
+                .filter(f => f.column_id === columnId)
+                .map(async (file) => {
+                    const response = await fetch(`/api/classes/consolidations?fileId=${file.id}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    const result = await readApiResponse(response);
+                    if (!response.ok) throw new Error(result.error || "Falha ao baixar arquivo");
+                    
+                    const fileRes = await fetch(result.downloadUrl);
+                    if (!fileRes.ok) throw new Error("Falha ao obter conteúdo");
+                    const blob = await fileRes.blob();
+                    
+                    const rowName = result.row_name || file.row_name || "Desconhecido";
+                    const safeName = result.fileName || file.file_name || "arquivo";
+                    
+                    zip.file(`[${rowName.replace(/[\/\\?%*:|"<>]/g, '-').substring(0, 30)}] ${safeName}`, blob);
+                });
+                
+            await Promise.all(filePromises);
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            saveAs(zipBlob, `Consolidado - ${column?.name || 'arquivos'}.zip`);
+        } catch (err: any) {
+            setError(err.message || "Falha ao gerar arquivo consolidado.");
+        } finally {
+            setIsZipping(false);
+        }
+    };
+
+    const triggerUpload = (rowId: string, rowName: string) => {
+        setActiveUploadRow({ id: rowId, name: rowName });
+        fileInputRef.current?.click();
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !column || !activeUploadRow) return;
+        
+        const { id: rowId, name: rowName } = activeUploadRow;
+        setUploadingRowId(rowId);
+        setError("");
+        
+        try {
+            const token = await getToken();
+            
+            const prepareRes = await fetch("/api/classes/consolidations", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "prepareUpload",
+                    classKey,
+                    rowId,
+                    columnId,
+                    fileName: file.name
+                })
+            });
+            const prepareData = await readApiResponse(prepareRes);
+            if (!prepareRes.ok) throw new Error(prepareData.error || "Falha ao preparar upload");
+            
+            const uploadRes = await fetch(prepareData.signedUrl, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": file.type || "application/octet-stream",
+                    "x-upsert": "true"
+                },
+                body: file
+            });
+            if (!uploadRes.ok) throw new Error("Falha ao enviar arquivo para o storage");
+            
+            const finalizeRes = await fetch("/api/classes/consolidations", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "finalizeUpload",
+                    classKey,
+                    rowId,
+                    rowName,
+                    columnId,
+                    filePath: prepareData.path,
+                    fileName: file.name,
+                    mimeType: file.type || "application/octet-stream",
+                    sizeBytes: file.size,
+                    batchIndex: 0,
+                    batchTotal: 1,
+                })
+            });
+            const finalizeData = await readApiResponse(finalizeRes);
+            if (!finalizeRes.ok) throw new Error(finalizeData.error || "Falha ao finalizar upload");
+            
+            loadData();
+        } catch (err: any) {
+            setError(err.message || "Erro no upload do arquivo.");
+        } finally {
+            setUploadingRowId(null);
+            setActiveUploadRow(null);
+            e.target.value = "";
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center text-slate-500">
@@ -174,9 +289,78 @@ export default function ConsolidationStatusPage() {
         );
     }
 
+    const renderCard = (organization: any) => {
+        const rowFiles = filesByRow.get(organization.id) || filesByRow.get(legacyIdByOrganizationId.get(organization.id) || "") || [];
+        const received = rowFiles.length > 0;
+        const isUploading = uploadingRowId === organization.id;
+
+        return (
+            <div
+                key={organization.id}
+                className={cn(
+                    "flex aspect-square min-h-36 flex-col justify-between rounded-lg border p-3 shadow-[0_12px_0_rgba(15,23,42,0.10),0_18px_28px_rgba(15,23,42,0.14)] transition-transform hover:-translate-y-0.5",
+                    received
+                        ? "border-lime-300 bg-lime-300 text-lime-950"
+                        : "border-slate-300 bg-slate-200 text-slate-600"
+                )}
+            >
+                <div className="min-w-0">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                        {received ? <CheckCircle2 className="h-5 w-5 shrink-0 text-lime-800" /> : <FileText className="h-5 w-5 shrink-0 text-slate-500" />}
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black", received ? "bg-lime-100 text-lime-800" : "bg-white/70 text-slate-500")}>
+                            {received ? "Recebido" : "Pendente"}
+                        </span>
+                    </div>
+                    <p className="text-[11px] font-black leading-tight">
+                        {shortName(organization.name)}
+                    </p>
+                </div>
+
+                {received ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                        {rowFiles.map(file => (
+                            <button
+                                key={file.id}
+                                type="button"
+                                onClick={() => downloadFile(file)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-lime-800 shadow-sm transition-colors hover:bg-white"
+                                title={file.file_name}
+                                aria-label={`Baixar ${file.file_name}`}
+                            >
+                                {downloadingFileId === file.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="mt-2 flex items-center justify-center">
+                        <button
+                            type="button"
+                            onClick={() => triggerUpload(organization.id, organization.name)}
+                            disabled={isUploading}
+                            className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-slate-300/80 px-2 text-[10px] font-bold text-slate-600 transition-colors hover:bg-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {isUploading ? (
+                                <><Loader2 className="h-3 w-3 animate-spin" /> Enviando...</>
+                            ) : (
+                                <><UploadCloud className="h-3.5 w-3.5" /> Enviar Arquivo</>
+                            )}
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     return (
         <div className="min-h-[calc(100vh-8rem)] bg-slate-50 pb-10">
             <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+                <input
+                    type="file"
+                    className="hidden"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
+                />
                 <Link href={`/classes/consolidacoes?classe=${classKey}`} className="inline-flex w-fit items-center gap-2 text-sm font-black text-slate-500 transition-colors hover:text-radar-dark">
                     <ArrowLeft className="h-4 w-4" />
                     Voltar para Consolidações
@@ -217,71 +401,61 @@ export default function ConsolidationStatusPage() {
                         </section>
 
                         <section className="grid gap-5">
-                            {organizationGroups.map(group => (
-                                <div key={group.id} className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                            {column.consolidation_scope === "command" ? (
+                                <div className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
                                     <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                                         <div>
-                                            <h2 className="text-sm font-black uppercase tracking-wide text-radar-dark">{group.name}</h2>
-                                            <p className="text-xs font-semibold text-slate-500">{group.location}</p>
+                                            <h2 className="text-sm font-black uppercase tracking-wide text-radar-dark">Grandes Unidades</h2>
+                                            <p className="text-xs font-semibold text-slate-500">Comandos Enquadrantes</p>
                                         </div>
                                         <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500">
-                                            {column.consolidation_scope === "command" ? 1 : group.units.length} OM{column.consolidation_scope === "command" ? "" : "s"}
+                                            {organizationGroups.length} Grandes Unidades
                                         </span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-                                        {group.units.map((organization, index) => {
-                                            if (column.consolidation_scope === "command" && index !== 0) return null;
-                                            
-                                            const rowFiles = filesByRow.get(organization.id) || filesByRow.get(legacyIdByOrganizationId.get(organization.id) || "") || [];
-                                            const received = rowFiles.length > 0;
-
-                                            return (
-                                                <div
-                                                    key={organization.id}
-                                                    className={cn(
-                                                        "flex aspect-square min-h-36 flex-col justify-between rounded-lg border p-3 shadow-[0_12px_0_rgba(15,23,42,0.10),0_18px_28px_rgba(15,23,42,0.14)] transition-transform hover:-translate-y-0.5",
-                                                        received
-                                                            ? "border-lime-300 bg-lime-300 text-lime-950"
-                                                            : "border-slate-300 bg-slate-200 text-slate-600"
-                                                    )}
-                                                >
-                                                    <div className="min-w-0">
-                                                        <div className="mb-2 flex items-center justify-between gap-2">
-                                                            {received ? <CheckCircle2 className="h-5 w-5 shrink-0 text-lime-800" /> : <FileText className="h-5 w-5 shrink-0 text-slate-500" />}
-                                                            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black", received ? "bg-lime-100 text-lime-800" : "bg-white/70 text-slate-500")}>
-                                                                {received ? "Recebido" : "Pendente"}
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-[11px] font-black leading-tight">
-                                                            {shortName(organization.name)}
-                                                        </p>
-                                                    </div>
-
-                                                    {received ? (
-                                                        <div className="mt-2 flex flex-wrap gap-1">
-                                                            {rowFiles.map(file => (
-                                                                <button
-                                                                    key={file.id}
-                                                                    type="button"
-                                                                    onClick={() => downloadFile(file)}
-                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-lime-800 shadow-sm transition-colors hover:bg-white"
-                                                                    title={file.file_name}
-                                                                    aria-label={`Baixar ${file.file_name}`}
-                                                                >
-                                                                    {downloadingFileId === file.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="mt-2 h-7 rounded-md bg-slate-300/80" />
-                                                    )}
-                                                </div>
-                                            );
+                                        {organizationGroups.map(group => {
+                                            const organization = group.units[0];
+                                            if (!organization) return null;
+                                            return renderCard(organization);
                                         })}
                                     </div>
                                 </div>
-                            ))}
+                            ) : (
+                                organizationGroups.map(group => (
+                                    <div key={group.id} className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <h2 className="text-sm font-black uppercase tracking-wide text-radar-dark">{group.name}</h2>
+                                                <p className="text-xs font-semibold text-slate-500">{group.location}</p>
+                                            </div>
+                                            <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500">
+                                                {group.units.length} OMs
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                                            {group.units.map(organization => renderCard(organization))}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </section>
+
+                        {receivedRows.length > 0 && (
+                            <div className="flex justify-center pt-4">
+                                <button
+                                    type="button"
+                                    onClick={downloadConsolidated}
+                                    disabled={isZipping}
+                                    className="inline-flex items-center gap-2 rounded-full bg-radar-dark px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                                >
+                                    {isZipping ? (
+                                        <><Loader2 className="h-4 w-4 animate-spin" /> Compactando arquivos...</>
+                                    ) : (
+                                        <><Archive className="h-4 w-4" /> Baixar Consolidado ZIP</>
+                                    )}
+                                </button>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
